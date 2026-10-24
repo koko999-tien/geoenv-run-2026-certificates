@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Users, Image as ImageIcon, ShieldCheck, Loader2, ListChecks, Lock, Mail } from 'lucide-react';
+import { Users, Image as ImageIcon, ShieldCheck, Loader2, ListChecks, Lock, Mail, Eye } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { isPublicLocked } from '../lib/siteLock';
@@ -13,6 +13,21 @@ interface Stats {
   loading: boolean;
 }
 
+interface VisitStats {
+  total: number;
+  today: number;
+  unique: number;
+  byPage: { path: string; views: number }[];
+}
+
+/* Tên hiển thị cho từng đường dẫn trong bảng lượt truy cập */
+const PAGE_NAMES: Record<string, string> = {
+  '/': 'Trang chủ',
+  '/tra-cuu': 'Tra cứu giấy chứng nhận',
+  '/thu-vien-anh': 'Thư viện ảnh',
+  '/gop-y': 'Góp ý & phản ánh',
+};
+
 export function AdminDashboard() {
   const [stats, setStats] = useState<Stats>({
     totalCertificates: 0,
@@ -22,6 +37,10 @@ export function AdminDashboard() {
     unreadFeedback: null,
     loading: true,
   });
+  /* Lượt truy cập — null = đang tải, lỗi thì hiện câu báo riêng, không làm mất
+     các số liệu khác. Chỉ trang này (sau đăng nhập) mới gọi hàm thống kê. */
+  const [visits, setVisits] = useState<VisitStats | null>(null);
+  const [visitsError, setVisitsError] = useState(false);
   /* Trạng thái khóa khu vực công khai: null = chưa đọc được (bảng cài đặt chưa có) */
   const [siteLocked, setSiteLocked] = useState<boolean | null>(null);
   const [confirmToggle, setConfirmToggle] = useState(false);
@@ -68,6 +87,31 @@ export function AdminDashboard() {
       }
     };
     loadStats();
+    /* Số liệu truy cập — tải riêng, nuốt lỗi riêng để bảng đếm chưa có cũng
+       không ảnh hưởng các số liệu khác */
+    supabase
+      .rpc('visit_stats')
+      .then(
+        ({ data, error }) => {
+          if (error || !data) {
+            setVisitsError(true);
+            return;
+          }
+          const d = data as {
+            total?: number;
+            today?: number;
+            unique_visitors?: number;
+            by_page?: { path: string; views: number }[];
+          };
+          setVisits({
+            total: d.total ?? 0,
+            today: d.today ?? 0,
+            unique: d.unique_visitors ?? 0,
+            byPage: Array.isArray(d.by_page) ? d.by_page : [],
+          });
+        },
+        () => setVisitsError(true),
+      );
   }, []);
 
   /* Bật/tắt khóa khu vực công khai — bấm 1 lần để xác nhận, bấm lần 2 mới đổi */
@@ -129,6 +173,61 @@ export function AdminDashboard() {
             </span>
           </div>
         ))}
+      </div>
+
+      {/* Lượt truy cập — CHỈ quản trị viên thấy: thẻ này nằm trong trang quản trị
+          (sau đăng nhập), và hàm visit_stats chỉ cấp quyền cho tài khoản đã đăng
+          nhập nên khách không thể đọc được số liệu dù biết tên hàm */}
+      <div className="card mt-6 p-6 sm:p-7">
+        <h3 className="flex items-center gap-2.5 text-lg font-bold text-slate-900">
+          <Eye className="h-5 w-5 text-geoenv-600" />
+          Lượt truy cập
+        </h3>
+        <p className="mt-2 text-sm leading-relaxed text-slate-600">
+          Mỗi người mỗi trang mỗi ngày tính 1 lượt (tải lại trang trong ngày không tính
+          thêm). Lượt của quản trị viên không tính vào đây. Số liệu bắt đầu đếm từ khi
+          tính năng này lên sóng, không có số của những ngày trước đó.
+        </p>
+        {visitsError ? (
+          <p className="mt-4 text-sm text-slate-500">
+            Chưa tải được số liệu — chạy file SQL theo dõi lượt truy cập rồi tải lại trang.
+          </p>
+        ) : !visits ? (
+          <Loader2 className="mt-4 h-6 w-6 animate-spin text-geoenv-600" />
+        ) : (
+          <>
+            <div className="mt-4 grid grid-cols-3 gap-4">
+              <div>
+                <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Tổng lượt</p>
+                <p className="mt-1 text-2xl font-bold tabular-nums text-slate-900 sm:text-3xl">
+                  {visits.total}
+                </p>
+              </div>
+              <div>
+                <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Hôm nay</p>
+                <p className="mt-1 text-2xl font-bold tabular-nums text-slate-900 sm:text-3xl">
+                  {visits.today}
+                </p>
+              </div>
+              <div>
+                <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Người khác nhau</p>
+                <p className="mt-1 text-2xl font-bold tabular-nums text-slate-900 sm:text-3xl">
+                  {visits.unique}
+                </p>
+              </div>
+            </div>
+            {visits.byPage.length > 0 && (
+              <div className="mt-5 space-y-1.5 border-t border-slate-100 pt-4">
+                {visits.byPage.map((row) => (
+                  <div key={row.path} className="flex items-center justify-between text-sm">
+                    <span className="text-slate-600">{PAGE_NAMES[row.path] ?? row.path}</span>
+                    <span className="font-semibold tabular-nums text-slate-900">{row.views}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </>
+        )}
       </div>
 
       {/* Công tắc khóa khu vực công khai */}

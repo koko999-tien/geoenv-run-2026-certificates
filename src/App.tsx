@@ -12,6 +12,7 @@ import { AdminLogin } from './pages/AdminLogin';
 import { AdminDashboard } from './pages/AdminDashboard';
 import { AdminCertificates } from './pages/AdminCertificates';
 import { AdminGallery } from './pages/AdminGallery';
+import { VisitTracker } from './components/VisitTracker';
 
 /* Web này là trang đơn (không tải lại trang khi chuyển mục) nên trình duyệt giữ
    nguyên vị trí cuộn sang trang mới — đang ở cuối trang chủ mà bấm sang trang
@@ -55,6 +56,7 @@ const App = () => {
   return (
     <BrowserRouter>
       <ScrollToTop />
+      <VisitTracker />
       <Routes>
         <Route element={<Layout />}>
           <Route path="/" element={<Home />} />
