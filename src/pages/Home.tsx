@@ -166,18 +166,6 @@ export function Home() {
             {EVENT.intro}
           </p>
 
-          {/* Nút hành động chính — chỉ giữ 1 nút quan trọng nhất trong banner;
-              hai chức năng đầy đủ nằm ở hàng ô ngay dưới banner */}
-          <div className="mt-8 flex items-center justify-center">
-            <Link
-              to="/tra-cuu"
-              className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-white px-8 py-4 font-semibold text-geoenv-800 shadow-lg transition-all duration-200 hover:-translate-y-0.5 hover:bg-geoenv-50 focus:outline-none focus:ring-2 focus:ring-white focus:ring-offset-2 focus:ring-offset-geoenv-900 sm:w-auto"
-            >
-              <Award className="h-5 w-5" />
-              Tra cứu giấy chứng nhận
-            </Link>
-          </div>
-
           {/* ============ BỘ ĐẾM NGƯỢC (thẻ kính mờ trên nền ảnh) ============ */}
           <div className="mt-12">
             {isStarted ? (
@@ -247,6 +235,70 @@ export function Home() {
                 <ArrowRight className="ml-auto h-5 w-5 shrink-0 text-emerald-500 transition-transform group-hover:translate-x-1" />
               </div>
             </Link>
+          </div>
+        </div>
+      </section>
+
+      {/* ================= DÃY SỐ LIỆU NỔI BẬT ================= */}
+      <section className="bg-gradient-to-r from-geoenv-800 via-geoenv-700 to-geoenv-800 py-8 sm:py-10">
+        <div className="mx-auto grid max-w-5xl grid-cols-2 gap-6 px-4 sm:px-6 lg:grid-cols-4">
+          {[
+            { icon: Flag, value: '85', label: 'Đội tham gia' },
+            { icon: Users, value: '425', label: 'Vận động viên' },
+            { icon: Route, value: '10 KM', label: 'Cự ly Ekiden' },
+            { icon: Sparkles, value: '60 năm', label: 'Thành lập HUMG' },
+          ].map((stat) => (
+            <div key={stat.label} className="text-center">
+              <stat.icon className="mx-auto h-5 w-5 text-geoenv-200" />
+              <p className="mt-2 text-2xl font-extrabold tracking-tight text-white sm:text-3xl">
+                {stat.value}
+              </p>
+              <p className="mt-0.5 text-xs font-medium uppercase tracking-wider text-geoenv-200 sm:text-sm sm:normal-case sm:tracking-normal">
+                {stat.label}
+              </p>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      {/* ================= NHÌN LẠI MÙA 1 — ảnh thật, dẫn vào thư viện ================= */}
+      <section className="py-12 sm:py-16">
+        <div className="mx-auto max-w-5xl px-4 sm:px-6">
+          <div className="flex flex-wrap items-end justify-between gap-3">
+            <div>
+              <h2 className="text-2xl font-bold text-slate-900 sm:text-3xl">
+                Nhìn lại GEOENV RUN mùa 1
+              </h2>
+              <p className="mt-2 max-w-xl text-sm text-slate-600 sm:text-base">
+                Những khoảnh khắc đáng nhớ của mùa giải 2025 — hẹn gặp lại ở mùa 2 với quy mô lớn
+                hơn.
+              </p>
+            </div>
+            <Link
+              to="/thu-vien-anh"
+              className="group inline-flex items-center gap-1.5 text-sm font-semibold text-geoenv-700 hover:text-geoenv-800"
+            >
+              <Camera className="h-4 w-4" />
+              Xem thư viện ảnh
+              <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
+            </Link>
+          </div>
+
+          <div className="mt-7 grid grid-cols-1 gap-4 sm:grid-cols-3">
+            {['/s1-1.jpg', '/s1-2.jpg', '/s1-3.jpg'].map((src, i) => (
+              <Link
+                key={src}
+                to="/thu-vien-anh"
+                className="group block overflow-hidden rounded-2xl shadow-sm ring-1 ring-slate-900/5"
+              >
+                <img
+                  src={src}
+                  alt={`GEOENV RUN mùa 1 — ảnh ${i + 1}`}
+                  loading="lazy"
+                  className="aspect-[3/2] w-full object-cover transition-transform duration-300 group-hover:scale-105"
+                />
+              </Link>
+            ))}
           </div>
         </div>
       </section>

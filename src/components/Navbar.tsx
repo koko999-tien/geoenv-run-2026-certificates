@@ -39,12 +39,6 @@ export function Navbar() {
                 {link.label}
               </Link>
             ))}
-            <Link
-              to="/tra-cuu"
-              className="ml-2 rounded-xl bg-geoenv-600 px-4 py-2 text-sm font-semibold text-white shadow-[0_6px_16px_-6px_rgba(30,95,196,0.5)] transition-all hover:-translate-y-0.5 hover:bg-geoenv-700"
-            >
-              Tra cứu ngay
-            </Link>
           </div>
 
           {/* Nút ☰ điện thoại */}
@@ -72,13 +66,6 @@ export function Navbar() {
               {link.label}
             </Link>
           ))}
-          <Link
-            to="/tra-cuu"
-            onClick={closeMenu}
-            className="mt-2 block rounded-xl bg-geoenv-600 px-4 py-3 text-center text-sm font-semibold text-white transition-colors hover:bg-geoenv-700"
-          >
-            Tra cứu giấy chứng nhận
-          </Link>
         </div>
       )}
     </nav>
