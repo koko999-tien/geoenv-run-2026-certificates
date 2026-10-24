@@ -140,9 +140,9 @@ function detectColumns(raw: string[][]): {
 
 export function AdminCertificates() {
   const [search, setSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState<
-    'all' | 'eligible' | 'locked' | 'hasLink' | 'noLink'
-  >('all');
+  /* Mục riêng cho hồ sơ vi phạm — khỏi phải mò trong 400 dòng */
+  const [view, setView] = useState<'all' | 'violations'>('all');
+  const [statusFilter, setStatusFilter] = useState<'all' | 'hasLink' | 'noLink'>('all');
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(50);
   const [showImport, setShowImport] = useState(false);
@@ -417,17 +417,14 @@ export function AdminCertificates() {
     const q = strip(search);
     const matchSearch =
       !q || strip(r.full_name).includes(q) || strip(r.class_name).includes(q);
+    const matchView = view === 'violations' ? !r.is_eligible : true;
     const matchStatus =
       statusFilter === 'all'
         ? true
-        : statusFilter === 'eligible'
-          ? r.is_eligible
-          : statusFilter === 'locked'
-            ? !r.is_eligible
-            : statusFilter === 'hasLink'
-              ? !!r.certificate_url
-              : !r.certificate_url;
-    return matchSearch && matchStatus;
+        : statusFilter === 'hasLink'
+          ? !!r.certificate_url
+          : !r.certificate_url;
+    return matchSearch && matchView && matchStatus;
   });
   const pageCount = Math.max(1, Math.ceil(visibleRows.length / pageSize));
   const safePage = Math.min(page, pageCount);
@@ -482,11 +479,9 @@ export function AdminCertificates() {
           }}
           className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm"
         >
-          <option value="all">Tất cả trạng thái</option>
-          <option value="eligible">Đang đủ điều kiện</option>
-          <option value="locked">Đang bị khóa</option>
-          <option value="hasLink">Đã có link ảnh</option>
-          <option value="noLink">Chưa có link ảnh</option>
+          <option value="all">Link ảnh: tất cả</option>
+          <option value="hasLink">Link ảnh: đã có</option>
+          <option value="noLink">Link ảnh: chưa có</option>
         </select>
         <select
           value={pageSize}
@@ -508,6 +503,36 @@ export function AdminCertificates() {
           <p>{listError}</p>
         </div>
       )}
+
+      {/* Mục Tất cả / Vi phạm — bấm là thấy ngay, khỏi lọc mò */}
+      <div className="mb-6 flex flex-wrap gap-2">
+        <button
+          onClick={() => {
+            setView('all');
+            setPage(1);
+          }}
+          className={`rounded-full px-4 py-2 text-sm font-medium ring-1 transition-colors ${
+            view === 'all'
+              ? 'bg-slate-900 text-white ring-slate-900'
+              : 'bg-white text-slate-700 ring-slate-200 hover:bg-slate-50'
+          }`}
+        >
+          Tất cả hồ sơ ({rows.length})
+        </button>
+        <button
+          onClick={() => {
+            setView('violations');
+            setPage(1);
+          }}
+          className={`rounded-full px-4 py-2 text-sm font-medium ring-1 transition-colors ${
+            view === 'violations'
+              ? 'bg-red-600 text-white ring-red-600'
+              : 'bg-white text-red-700 ring-red-200 hover:bg-red-50'
+          }`}
+        >
+          Hồ sơ vi phạm ({rows.filter((r) => !r.is_eligible).length})
+        </button>
+      </div>
 
       {/* Bảng danh sách */}
       {loading ? (
@@ -611,7 +636,9 @@ export function AdminCertificates() {
                 {rows.length > 0 && visibleRows.length === 0 && (
                   <tr>
                     <td colSpan={7} className="px-5 py-12 text-center text-sm text-slate-500">
-                      Không tìm thấy kết quả khớp với "{search}"
+                      {view === 'violations' && !search
+                        ? 'Chưa có hồ sơ vi phạm nào.'
+                        : `Không tìm thấy kết quả khớp với "${search}"`}
                     </td>
                   </tr>
                 )}
