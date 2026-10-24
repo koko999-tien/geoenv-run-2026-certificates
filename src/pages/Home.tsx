@@ -163,7 +163,7 @@ export function Home() {
           </div>
 
           {/* ✏️ Đoạn giới thiệu (sửa trong EVENT ở đầu file) */}
-          <p className="mx-auto mt-5 max-w-xl text-sm leading-relaxed text-white/85 sm:text-base">
+          <p className="mx-auto mt-5 max-w-xl text-balance text-sm leading-relaxed text-white/85 sm:text-base">
             {EVENT.intro}
           </p>
 
