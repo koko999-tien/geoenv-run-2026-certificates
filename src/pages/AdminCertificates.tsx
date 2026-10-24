@@ -199,6 +199,15 @@ export function AdminCertificates() {
   const [lockReason, setLockReason] = useState('');
   const [locking, setLocking] = useState(false);
   const [needsReasonColumn, setNeedsReasonColumn] = useState(false);
+  const lockBoxRef = useRef<HTMLDivElement>(null);
+
+  /* Bảng có 402 dòng nên hộp khóa nằm tít cuối trang — bấm nút là tự cuộn tới hộp,
+     không thì trông như bấm mà không có gì xảy ra */
+  useEffect(() => {
+    if (lockingRow) {
+      lockBoxRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  }, [lockingRow]);
 
   useEffect(() => {
     fetchCertificates();
@@ -554,7 +563,7 @@ export function AdminCertificates() {
 
       {/* Hộp khóa vi phạm */}
       {lockingRow && (
-        <div className="card mt-6 border-red-200 p-4 sm:p-6">
+        <div ref={lockBoxRef} className="card mt-6 border-red-200 p-4 sm:p-6">
           <h3 className="flex items-center gap-2 text-lg font-bold text-slate-900">
             <Lock className="h-5 w-5 text-red-600" /> Khóa chứng nhận — {lockingRow.full_name} •{' '}
             Lớp {lockingRow.class_name}
