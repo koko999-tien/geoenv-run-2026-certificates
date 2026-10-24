@@ -1,9 +1,10 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { Link } from 'react-router-dom';
 import { Download, AlertCircle, CheckCircle, Search, Info, Lightbulb, Lock } from 'lucide-react';
 import { Button } from '../components/Button';
 import { cn } from '../lib/utils';
 import { supabase } from '../lib/supabase';
+import { OFFICIAL_MAJORS } from '../data/majors';
 
 interface SearchResult {
   found: boolean;
@@ -17,68 +18,242 @@ interface SearchResult {
   lockReason: string | null;
 }
 
+/* Bỏ dấu tiếng Việt để gõ không dấu cũng khớp ("nguyen" khớp "Nguyễn") */
+const strip = (text: string) =>
+  text
+    .trim()
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/đ/g, 'd')
+    .replace(/\s+/g, ' ');
+
+/* Viết tắt từ tên lớp đầy đủ: chữ cái đầu mỗi từ, giữ nguyên token có số (K71A),
+   bỏ từ nối "và"/"của" — vd "Quản lý tài nguyên môi trường K71A" -> "qltnmtk71a" */
+const acronym = (text: string) =>
+  strip(text)
+    .split(/[^a-z0-9]+/)
+    .filter((w) => w && w !== 'va' && w !== 'cua')
+    .map((w) => (/\d/.test(w) ? w : w[0]))
+    .join('');
+
+/* Kiểu viết tắt thứ 2 của trường (Tiến xác nhận): mã = tiền tố khoa + khóa/lớp.
+   VD "DCMTQL69A" = tiền tố "DCMTQL" (Địa chất - Môi trường - Quản lý) + khóa "69A",
+   tương đương lớp "Quản lý tài nguyên môi trường K69A". Mỗi khoa có tiền tố riêng
+   nên bảng này chỉ thêm được khi có ví dụ xác nhận — không đoán mò. */
+const PREFIX_ALIASES: { code: string; major: string }[] = [
+  { code: 'dcmtql', major: 'quản lý tài nguyên môi trường' },
+];
+
+/* Khoá chuẩn hoá để so sánh tên ngành: bỏ dấu, bỏ từ nối "và"/"của", quy
+   "lí"->"lý", "kĩ"->"kỹ" (cùng một từ viết khác nhau), "bds" = bất động sản */
+const WORD_ALIASES: Record<string, string> = { bds: 'batdongsan' };
+const majorKey = (text: string) =>
+  strip(text)
+    .split(/[^a-z0-9]+/)
+    .filter((w) => w && w !== 'va' && w !== 'cua')
+    .map((w) => WORD_ALIASES[w] ?? (w === 'li' ? 'ly' : w === 'ki' ? 'ky' : w))
+    .join('');
+
+/* Tách tên lớp thành (phần ngành, phần khóa). Token cuối bắt đầu bằng số hoặc
+   "K"+số là khóa (K70D1, 70_02, 67-04A...); chữ cái lẻ cuối tên ngành là lớp con
+   (A/B/C) hoặc tiền tố khóa viết tách ("K 71A") nên bỏ đi khi so ngành */
+const splitClass = (text: string) => {
+  const tokens = strip(text).split(' ').filter(Boolean);
+  if (tokens.length > 1 && /^k?\d/i.test(tokens[tokens.length - 1])) {
+    const cohort = tokens.pop()!;
+    while (
+      tokens.length > 1 &&
+      (/^[a-z]$/.test(tokens[tokens.length - 1]) || /^[a-z]\d+$/.test(tokens[tokens.length - 1]))
+    ) {
+      tokens.pop();
+    }
+    const head = tokens.join(' ').replace(/\s*chat luong cao$/, '').trim();
+    return { head, cohort };
+  }
+  const s = strip(text);
+  const m = s.match(/^(.*?)(k?\d[\w-]*)$/);
+  if (m) return { head: m[1].trim(), cohort: m[2] };
+  return { head: s, cohort: '' };
+};
+
+/* "K69A" và "69A" coi là một; "70_02" và "70-02" coi là một */
+const cohortKey = (cohort: string) => cohort.toLowerCase().replace(/^k/, '').replace(/[^a-z0-9]/g, '');
+
+const OFFICIAL_BY_KEY = new Map(OFFICIAL_MAJORS.map((m) => [majorKey(m), m]));
+const OFFICIAL_BY_ACRONYM = new Map(OFFICIAL_MAJORS.map((m) => [acronym(m), m]));
+
+/* Quy tên lớp về (ngành chính thức, khóa): khớp tên đầy đủ, viết tắt chữ cái đầu
+   (QLTNMT), hoặc tên dài hơn ngành chính thức (lấy ngành dài nhất là tiền tố).
+   Mã kiểu khoa (DCCTCT...) không quy được — trả null, để lưới chọn lớp lo. */
+const resolveMajor = (text: string) => {
+  const { head, cohort } = splitClass(text);
+  const key = majorKey(head);
+  let major = OFFICIAL_BY_KEY.get(key) ?? OFFICIAL_BY_ACRONYM.get(key) ?? null;
+  if (!major && key === 'dcmtql') major = 'Quản lý tài nguyên và môi trường';
+  if (!major) {
+    let best: string | null = null;
+    for (const m of OFFICIAL_MAJORS) {
+      const mk = majorKey(m);
+      if (key.startsWith(mk) && (!best || mk.length > majorKey(best).length)) best = m;
+    }
+    major = best;
+  }
+  return major ? { major, cohort: cohortKey(cohort) } : null;
+};
+
+/* Khớp kiểu khoa: cùng khóa, một bên là tiền tố khoa, bên kia là tên ngành đầy đủ */
+const prefixAliasMatches = (typed: string, stored: string) => {
+  const t = splitClass(typed);
+  const s = splitClass(stored);
+  if (!t.cohort || cohortKey(t.cohort) !== cohortKey(s.cohort)) return false;
+  return PREFIX_ALIASES.some(({ code, major }) => {
+    const tk = majorKey(t.head);
+    const sk = majorKey(s.head);
+    const mk = majorKey(major);
+    return (tk === code && mk === sk) || (mk === tk && sk === code);
+  });
+};
+
+/* Lớp gõ vào khớp lớp đã lưu khi: giống nhau (không dấu), một bên là viết tắt
+   chữ cái đầu của bên kia, khớp quy tắc tiền tố khoa, hoặc cùng quy về một
+   ngành chính thức + cùng khóa — vd "QLTNMT K71A", "DCMTQL69A", "Quản lí tài
+   nguyên môi trường K69A" đều khớp "Quản lý tài nguyên và môi trường K69A" */
+const classMatches = (typed: string, stored: string) => {
+  const a = strip(typed).replace(/\s+/g, '');
+  const b = strip(stored).replace(/\s+/g, '');
+  if (!a || !b) return false;
+  if (a === b) return true;
+  if (acronym(typed) === b || a === acronym(stored)) return true;
+  if (prefixAliasMatches(typed, stored)) return true;
+  const rt = resolveMajor(typed);
+  const rs = resolveMajor(stored);
+  return !!rt && !!rs && rt.major === rs.major && rt.cohort === rs.cohort;
+};
+
+interface Candidate {
+  fullName: string;
+  className: string;
+}
+
 export function CertificateLookup() {
   const [form, setForm] = useState({ fullName: '', className: '' });
   const [result, setResult] = useState<SearchResult | null>(null);
+  /* Khi tên khớp mà lớp chưa khớp: cho VĐV chọn đúng lớp trong các lớp tìm thấy */
+  const [candidates, setCandidates] = useState<Candidate[] | null>(null);
+  const [candidateRows, setCandidateRows] = useState<Record<string, any>[] | null>(null);
+  /* Tối ưu: tải danh sách 1 lần rồi giữ lại, tìm lại không gọi mạng nữa */
+  const rowsCache = useRef<Record<string, any>[] | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const normalize = (text: string) =>
-    text.trim().toLowerCase().replace(/\s+/g, ' ');
+  /* Kết quả cho 1 bản ghi: đủ điều kiện -> tải; bị khóa -> hiện lý do, không cho tải */
+  const resolveRecord = (record: Record<string, any>): SearchResult => {
+    /* ✏️ Link giấy chứng nhận là cột "certificate_url" trong bảng Supabase */
+    const certUrl = record.certificate_url ?? null;
+    if (!record.is_eligible) {
+      return {
+        found: true,
+        unique: true,
+        fullName: record.full_name,
+        className: record.class_name,
+        message: 'Giấy chứng nhận của bạn đã bị khóa.',
+        certificateUrl: null,
+        locked: true,
+        lockReason: record.violation_reason ?? null,
+      };
+    }
+    return {
+      found: true,
+      unique: true,
+      fullName: record.full_name,
+      className: record.class_name,
+      message: 'Tìm thấy giấy chứng nhận của bạn rồi! 🎉',
+      certificateUrl: certUrl,
+      locked: false,
+      lockReason: null,
+    };
+  };
+
+  const notFoundResult = (): SearchResult => ({
+    found: false,
+    unique: false,
+    fullName: null,
+    className: null,
+    message: 'Chúng tôi chưa tìm thấy giấy chứng nhận khớp với họ tên bạn nhập.',
+    certificateUrl: null,
+    locked: false,
+    lockReason: null,
+  });
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setLoading(true);
     setError(null);
     setResult(null);
+    setCandidates(null);
+    setCandidateRows(null);
 
     try {
-      const nameNorm = normalize(form.fullName);
-      const classNorm = normalize(form.className);
+      const nameNorm = strip(form.fullName);
+      const classTyped = form.className.trim();
 
-      if (!nameNorm || !classNorm) {
-        setError('Vui lòng nhập đầy đủ họ tên và lớp.');
+      if (!nameNorm) {
+        setError('Vui lòng nhập họ tên.');
         setLoading(false);
         return;
       }
 
-      const { data, error: supabaseError } = await supabase
-        .from('certificate_records')
-        .select('*')
-        .ilike('full_name', form.fullName.trim())
-        .ilike('class_name', form.className.trim());
+      /* Lấy toàn bộ bảng rồi khớp phía client — bảng chỉ vài trăm dòng nên vẫn nhẹ,
+         đổi lại khớp được không dấu, viết đầy đủ/viết tắt và gợi ý lớp khi gõ lệch.
+         Danh sách chỉ tải 1 lần rồi giữ trong bộ nhớ của trang. */
+      let all: Record<string, any>[];
+      if (rowsCache.current) {
+        all = rowsCache.current;
+      } else {
+        const { data, error: supabaseError } = await supabase
+          .from('certificate_records')
+          .select('*');
+        if (supabaseError) throw supabaseError;
+        all = data || [];
+        rowsCache.current = all;
+      }
 
-      if (supabaseError) throw supabaseError;
+      const nameMatches = all.filter((r) => strip(r.full_name) === nameNorm);
 
-      if (!data || data.length === 0) {
-        setResult({
-          found: false,
-          unique: false,
-          fullName: null,
-          className: null,
-          message: 'Chúng tôi chưa tìm thấy giấy chứng nhận khớp với họ tên và lớp bạn nhập.',
-          certificateUrl: null,
-          locked: false,
-          lockReason: null,
-        });
+      if (nameMatches.length === 0) {
+        setResult(notFoundResult());
         setLoading(false);
         return;
       }
 
-      const exactMatches = data.filter(
-        (r) => normalize(r.full_name) === nameNorm && normalize(r.class_name) === classNorm
-      );
+      /* Không gõ lớp: tên chỉ khớp 1 người thì hiện luôn, nhiều người thì cho chọn lớp */
+      if (!classTyped) {
+        if (nameMatches.length === 1) {
+          setResult(resolveRecord(nameMatches[0]));
+        } else {
+          setCandidateRows(nameMatches);
+          setCandidates(uniqueClasses(nameMatches));
+          setResult({
+            ...notFoundResult(),
+            message:
+              'Tìm thấy tên của bạn với nhiều lớp — chọn đúng lớp của bạn bên dưới nhé.',
+          });
+        }
+        setLoading(false);
+        return;
+      }
+
+      const exactMatches = nameMatches.filter((r) => classMatches(classTyped, r.class_name));
 
       if (exactMatches.length === 0) {
+        /* Tên đúng mà lớp gõ lệch (đầy đủ/viết tắt/gõ sai): cho chọn trong các lớp đã lưu */
+        setCandidateRows(nameMatches);
+        setCandidates(uniqueClasses(nameMatches));
         setResult({
-          found: false,
-          unique: false,
-          fullName: null,
-          className: null,
-          message: 'Chúng tôi chưa tìm thấy giấy chứng nhận khớp với họ tên và lớp bạn nhập.',
-          certificateUrl: null,
-          locked: false,
-          lockReason: null,
+          ...notFoundResult(),
+          message:
+            'Tìm thấy tên của bạn nhưng lớp chưa khớp — chọn đúng lớp của bạn bên dưới nhé.',
         });
       } else if (exactMatches.length > 1) {
         setResult({
@@ -93,38 +268,47 @@ export function CertificateLookup() {
           lockReason: null,
         });
       } else {
-        const record = exactMatches[0];
-        /* ✏️ Link giấy chứng nhận là cột "certificate_url" trong bảng Supabase */
-        const certUrl = record.certificate_url ?? null;
-        if (!record.is_eligible) {
-          /* Bị khóa do vi phạm: không cho tải, hiện lý do + mail BTC */
-          setResult({
-            found: true,
-            unique: true,
-            fullName: record.full_name,
-            className: record.class_name,
-            message: 'Giấy chứng nhận của bạn đã bị khóa.',
-            certificateUrl: null,
-            locked: true,
-            lockReason: record.violation_reason ?? null,
-          });
-        } else {
-          setResult({
-            found: true,
-            unique: true,
-            fullName: record.full_name,
-            className: record.class_name,
-            message: 'Tìm thấy giấy chứng nhận của bạn rồi! 🎉',
-            certificateUrl: certUrl,
-            locked: false,
-            lockReason: null,
-          });
-        }
+        setResult(resolveRecord(exactMatches[0]));
       }
     } catch {
       setError('Có lỗi xảy ra khi tra cứu. Vui lòng thử lại sau.');
     } finally {
       setLoading(false);
+    }
+  };
+
+  /* Các lớp khác nhau của cùng 1 tên (so theo dạng không dấu, giữ cách viết gốc) */
+  const uniqueClasses = (rows: Record<string, any>[]): Candidate[] => {
+    const seen = new Set<string>();
+    const out: Candidate[] = [];
+    for (const r of rows) {
+      const key = strip(r.class_name);
+      if (!seen.has(key)) {
+        seen.add(key);
+        out.push({ fullName: r.full_name, className: r.class_name });
+      }
+    }
+    return out;
+  };
+
+  const handlePickCandidate = (c: Candidate) => {
+    const rows = (candidateRows || []).filter((r) => strip(r.class_name) === strip(c.className));
+    if (rows.length === 1) {
+      setResult(resolveRecord(rows[0]));
+      setCandidates(null);
+    } else if (rows.length > 1) {
+      setResult({
+        found: true,
+        unique: false,
+        fullName: c.fullName,
+        className: c.className,
+        message:
+          'Hệ thống thấy nhiều bản ghi trùng họ tên và lớp. Vui lòng liên hệ ban tổ chức để xác minh nhé.',
+        certificateUrl: null,
+        locked: false,
+        lockReason: null,
+      });
+      setCandidates(null);
     }
   };
 
@@ -135,9 +319,9 @@ export function CertificateLookup() {
   };
 
   const notFoundTips = [
-    'Kiểm tra lại chính tả — nhớ đủ các dấu.',
+    'Gõ tên không cần dấu cũng được (ví dụ: "nguyen van a").',
+    'Lớp có thể gõ tên đầy đủ hoặc viết tắt đều được (ví dụ: "Quản lý tài nguyên môi trường K71A" hay "QLTNMT K71A").',
     'Nhập đúng họ tên đầy đủ như khi đăng ký (có chữ đệm).',
-    'Tên lớp phải khớp tên BTC lưu (ví dụ: "Du lịch địa chất K68").',
     'Vẫn không thấy? Liên hệ BTC qua thông tin ở cuối trang nhé.',
   ];
 
@@ -159,9 +343,9 @@ export function CertificateLookup() {
           Tra cứu giấy chứng nhận
         </h1>
         <p className="mx-auto mt-2 max-w-md text-sm leading-relaxed text-slate-600">
-          Nhập <strong className="text-slate-900">họ tên</strong> và{' '}
-          <strong className="text-slate-900">lớp</strong> để tìm và tải giấy chứng nhận tham gia
-          GEOENV RUN 2026.
+          Nhập <strong className="text-slate-900">họ tên</strong> để tìm và tải giấy chứng nhận
+          tham gia GEOENV RUN 2026. Lớp có thể gõ tên đầy đủ hoặc viết tắt đều được, bỏ trống
+          cũng được.
         </p>
       </div>
 
@@ -191,15 +375,14 @@ export function CertificateLookup() {
 
           <div className="space-y-2">
             <label htmlFor="className" className="block text-sm font-medium text-slate-700">
-              Lớp <span className="text-red-500">*</span>
+              Lớp <span className="font-normal text-slate-400">(có thể bỏ trống)</span>
             </label>
             <input
               id="className"
               type="text"
-              required
               className="input-field"
               // ✏️ Sửa ví dụ gợi ý tại đây
-              placeholder="Du lịch địa chất K68"
+              placeholder="Du lịch địa chất K68 hoặc QLTNMT K71A"
               value={form.className}
               onChange={(e) => setForm({ ...form, className: e.target.value })}
               autoComplete="off"
@@ -311,6 +494,28 @@ export function CertificateLookup() {
                 </div>
               )}
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Chọn lớp khi tên khớp mà lớp gõ chưa khớp */}
+      {candidates && candidates.length > 0 && (
+        <div className="card mt-4 p-5">
+          <p className="text-sm font-semibold text-slate-900">
+            Tìm thấy tên <span className="text-geoenv-700">{candidates[0].fullName}</span> với
+            các lớp sau — bấm đúng lớp của bạn:
+          </p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            {candidates.map((c) => (
+              <button
+                key={c.className}
+                type="button"
+                onClick={() => handlePickCandidate(c)}
+                className="rounded-full px-4 py-2 text-sm font-medium text-geoenv-700 ring-1 ring-geoenv-200 transition-colors hover:bg-geoenv-50"
+              >
+                Lớp {c.className}
+              </button>
+            ))}
           </div>
         </div>
       )}
