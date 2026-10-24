@@ -27,11 +27,11 @@ const EVENT = {
   name: 'GEOENV RUN 2026',
   tagline: 'Bước chân Địa chất – Môi trường',
   intro:
-    'Giải chạy tiếp sức Ekiden 10KM do Liên chi Đoàn Khoa Khoa học và Kỹ thuật Địa chất phối hợp Liên chi Đoàn Khoa Môi trường tổ chức — hướng tới kỷ niệm 60 năm thành lập Trường Đại học Mỏ – Địa chất và chào đón tân sinh viên K71.',
+    'Giải chạy tiếp sức Ekiden 10KM do Liên chi Đoàn hai Khoa: Khoa học & Kỹ thuật Địa chất phối hợp Khoa Môi trường tổ chức. Sự kiện chào đón tân sinh viên K71 và hướng tới kỷ niệm 60 năm thành lập Trường ĐH Mỏ – Địa chất.',
   dateText: 'Chủ nhật, 25/10/2026',
   placeText: 'Trường Đại học Mỏ – Địa chất',
   placeDetail:
-    'Đường nội khu cạnh giảng đường A1, Khu Đô thị Đại học, Trường Đại học Mỏ – Địa chất (đối diện Trường THCS & THPT Đoàn Thị Điểm)',
+    'Đường nội khu cạnh giảng đường A1, Khu Đô thị Đại học, Trường Đại học Mỏ – Địa chất (đối diện Trường THCS & THPT Đoàn Thị Điểm)',
   /* ✏️ QUAN TRỌNG: thời điểm giải chạy bắt đầu (dùng để đếm ngược) */
   startAt: '2026-10-25T06:00:00+07:00',
   hosts: [
@@ -163,7 +163,7 @@ export function Home() {
           </div>
 
           {/* ✏️ Đoạn giới thiệu (sửa trong EVENT ở đầu file) */}
-          <p className="mx-auto mt-5 max-w-xl text-balance text-sm leading-relaxed text-white/85 sm:text-base">
+          <p className="mx-auto mt-5 max-w-2xl text-pretty text-sm leading-relaxed text-white/85 sm:text-base">
             {EVENT.intro}
           </p>
 
@@ -303,11 +303,13 @@ export function Home() {
               </div>
             ))}
           </div>
-          <p className="mx-auto mt-5 max-w-2xl text-center text-sm leading-relaxed text-slate-500">
-            <MapPin className="mr-1 inline h-4 w-4 align-[-2px] text-geoenv-500" />
-            <span className="font-semibold text-slate-700">Cung đường thi đấu:</span>{' '}
-            {EVENT.placeDetail}
-          </p>
+          <div className="mt-5 flex justify-center px-4">
+            <p className="inline-block max-w-3xl rounded-2xl border border-slate-200 bg-slate-50 px-4 py-2.5 text-center text-sm leading-relaxed text-slate-500">
+              <MapPin className="mr-1 inline h-4 w-4 align-[-2px] text-geoenv-500" />
+              <span className="font-semibold text-slate-700">Cung đường thi đấu:</span>{' '}
+              {EVENT.placeDetail}
+            </p>
+          </div>
         </div>
       </section>
 
@@ -317,7 +319,7 @@ export function Home() {
           <h2 className="text-center text-xs font-bold uppercase tracking-[0.2em] text-geoenv-600">
             Giới thiệu giải chạy
           </h2>
-          <p className="mx-auto mt-5 max-w-2xl text-center text-sm leading-relaxed text-slate-600 sm:text-base">
+          <p className="mx-auto mt-5 max-w-2xl px-4 text-center text-pretty text-sm leading-relaxed text-slate-700 sm:text-base">
             GEOENV RUN Season 2 – “Bước chân Địa chất &amp; Môi trường” là sân chơi thể thao
             lành mạnh nhằm thúc đẩy phong trào rèn luyện sức khỏe, tăng cường giao lưu, kết
             nối giữa cán bộ, giảng viên và sinh viên hai Khoa Địa chất – Môi trường nói
@@ -329,10 +331,11 @@ export function Home() {
           </p>
 
           {/* Đoạn ý nghĩa 60 năm — chỉ dùng sự kiện đã xác thực, không thêm lời phát biểu */}
-          <p className="mx-auto mt-5 max-w-2xl text-center text-sm leading-relaxed text-slate-600 sm:text-base">
-            Giải chạy năm nay mang ý nghĩa đặc biệt khi diễn ra trong năm kỷ niệm 60 năm thành
-            lập Trường Đại học Mỏ – Địa chất (1966 – 2026), đồng thời chào đón tân sinh viên K71
-            — thế hệ sinh viên mới tiếp bước truyền thống 60 năm của Nhà trường.
+          <p className="mx-auto mt-5 max-w-2xl px-4 text-center text-pretty text-sm leading-relaxed text-slate-700 sm:text-base">
+            Giải chạy năm nay mang ý nghĩa đặc biệt khi diễn ra trong năm kỷ niệm 60 năm
+            thành&nbsp;lập Trường Đại học Mỏ&nbsp;–&nbsp;Địa&nbsp;chất (1966 – 2026), đồng thời chào đón
+            tân&nbsp;sinh&nbsp;viên K71 — thế hệ sinh viên mới tiếp bước truyền thống 60 năm của Nhà
+            trường.
           </p>
 
           <h3 className="mt-12 text-center text-2xl font-bold text-slate-900">
