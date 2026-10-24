@@ -76,38 +76,52 @@ function parseCsv(text: string): string[][] {
 const NAME_HEADERS = ['họ tên', 'họ và tên', 'tên', 'full_name', 'fullname', 'họ tên sv', 'sinh viên'];
 const CLASS_HEADERS = ['lớp', 'class_name', 'classname', 'lớp học'];
 
-/* Tìm dòng tiêu đề và vị trí cột Họ tên / Lớp; không thấy thì coi mọi dòng là dữ liệu */
-function extractRows(raw: string[][]): { fullName: string; className: string }[] {
-  let nameCol = 0;
-  let classCol = 1;
-  let start = 0;
+/* Lỗi Supabase là object thường (không phải instanceof Error) nên đọc message kiểu này */
+const supaMsg = (e: unknown) =>
+  (e as { message?: string } | null)?.message ?? 'Không rõ nguyên nhân';
+
+/* Nhận diện dòng tiêu đề: trả về nhãn cột, các dòng dữ liệu và cột Họ tên/Lớp mặc định.
+   BTC vẫn đổi lại được ở 2 ô chọn cột — vì tiêu đề file thực tế rất đa dạng. */
+function detectColumns(raw: string[][]): {
+  columns: string[];
+  dataRows: string[][];
+  nameCol: number;
+  classCol: number;
+} {
   for (let i = 0; i < raw.length; i++) {
     const cells = raw[i].map((c) => norm(c));
     const ni = cells.findIndex((c) => NAME_HEADERS.includes(c));
     const ci = cells.findIndex((c) => CLASS_HEADERS.includes(c));
     if (ni >= 0 && ci >= 0) {
-      nameCol = ni;
-      classCol = ci;
-      start = i + 1;
-      break;
+      return {
+        columns: raw[i].map((c, idx) => clean(c) || `Cột ${idx + 1}`),
+        dataRows: raw.slice(i + 1),
+        nameCol: ni,
+        classCol: ci,
+      };
     }
     /* Dự phòng: tiêu đề kiểu "Họ tên sinh viên", "Tên lớp"... — nhận theo từ khóa chứa */
     const ni2 = cells.findIndex((c) => c.includes('tên') && !c.includes('lớp'));
     const ci2 = cells.findIndex((c, idx) => idx !== ni2 && c.includes('lớp'));
     if (ni2 >= 0 && ci2 >= 0) {
-      nameCol = ni2;
-      classCol = ci2;
-      start = i + 1;
-      break;
+      return {
+        columns: raw[i].map((c, idx) => clean(c) || `Cột ${idx + 1}`),
+        dataRows: raw.slice(i + 1),
+        nameCol: ni2,
+        classCol: ci2,
+      };
     }
   }
-  const out: { fullName: string; className: string }[] = [];
-  for (let i = start; i < raw.length; i++) {
-    const fullName = clean(raw[i][nameCol] ?? '');
-    const className = clean(raw[i][classCol] ?? '');
-    if (fullName && className) out.push({ fullName, className });
-  }
-  return out;
+  const width = Math.max(0, ...raw.map((r) => r.length));
+  return {
+    columns: Array.from(
+      { length: width },
+      (_, idx) => `Cột ${idx + 1} (vd: ${clean(raw[0]?.[idx] ?? '')})`,
+    ),
+    dataRows: raw,
+    nameCol: 0,
+    classCol: 1,
+  };
 }
 
 export function AdminCertificates() {
@@ -119,10 +133,52 @@ export function AdminCertificates() {
 
   /* Nhập file */
   const fileRef = useRef<HTMLInputElement>(null);
+  const [columns, setColumns] = useState<string[]>([]);
+  const [dataRows, setDataRows] = useState<string[][]>([]);
+  const [nameCol, setNameCol] = useState(0);
+  const [classCol, setClassCol] = useState(1);
   const [parsed, setParsed] = useState<ParsedRow[]>([]);
   const [importing, setImporting] = useState(false);
   const [importResult, setImportResult] = useState('');
   const [importError, setImportError] = useState('');
+
+  /* Dựng lại bảng xem trước mỗi khi đổi cột Họ tên/Lớp */
+  useEffect(() => {
+    if (dataRows.length === 0) {
+      setParsed([]);
+      return;
+    }
+    let cancelled = false;
+    const build = async () => {
+      const extracted = dataRows
+        .map((r) => ({ fullName: clean(r[nameCol] ?? ''), className: clean(r[classCol] ?? '') }))
+        .filter((r) => r.fullName && r.className);
+      const seen = new Set<string>();
+      const unique = extracted.filter((r) => {
+        const k = `${norm(r.fullName)}|${norm(r.className)}`;
+        if (seen.has(k)) return false;
+        seen.add(k);
+        return true;
+      });
+      const { data: existing } = await supabase
+        .from('certificate_records')
+        .select('full_name, class_name');
+      if (cancelled) return;
+      const existingKeys = new Set(
+        (existing || []).map((r) => `${norm(r.full_name)}|${norm(r.class_name)}`),
+      );
+      setParsed(
+        unique.map((r) => ({
+          ...r,
+          alreadyExists: existingKeys.has(`${norm(r.fullName)}|${norm(r.className)}`),
+        })),
+      );
+    };
+    build();
+    return () => {
+      cancelled = true;
+    };
+  }, [dataRows, nameCol, classCol]);
 
   /* Khóa vi phạm */
   const [lockingRow, setLockingRow] = useState<CertificateRow | null>(null);
@@ -146,9 +202,7 @@ export function AdminCertificates() {
       if (error) throw error;
       setRows(data || []);
     } catch (e) {
-      setListError(
-        e instanceof Error ? e.message : 'Không tải được danh sách. Kiểm tra lại quyền truy cập bảng.',
-      );
+      setListError(`Không tải được danh sách: ${supaMsg(e)}`);
     } finally {
       setLoading(false);
     }
@@ -238,6 +292,9 @@ export function AdminCertificates() {
   const handleFile = async (file: File) => {
     setImportError('');
     setImportResult('');
+    setParsed([]);
+    setDataRows([]);
+    setColumns([]);
     try {
       let raw: string[][];
       if (/\.xlsx?$/i.test(file.name)) {
@@ -251,35 +308,19 @@ export function AdminCertificates() {
         setImportError('Chỉ hỗ trợ file .xlsx, .xls và .csv.');
         return;
       }
-      const extracted = extractRows(raw);
-      if (extracted.length === 0) {
-        setImportError('Không đọc được dòng nào. Kiểm tra file có cột Họ tên và Lớp.');
-        setParsed([]);
+      const detected = detectColumns(raw);
+      if (detected.dataRows.length === 0) {
+        setImportError('File không có dòng dữ liệu nào.');
         return;
       }
-      /* Loại trùng trong file + đánh dấu dòng đã có sẵn trong hệ thống */
-      const seen = new Set<string>();
-      const unique = extracted.filter((r) => {
-        const k = `${norm(r.fullName)}|${norm(r.className)}`;
-        if (seen.has(k)) return false;
-        seen.add(k);
-        return true;
-      });
-      const { data: existing } = await supabase
-        .from('certificate_records')
-        .select('full_name, class_name');
-      const existingKeys = new Set(
-        (existing || []).map((r) => `${norm(r.full_name)}|${norm(r.class_name)}`),
+      setColumns(detected.columns);
+      setDataRows(detected.dataRows);
+      setNameCol(detected.nameCol);
+      setClassCol(detected.classCol);
+    } catch (e) {
+      setImportError(
+        `Đọc file thất bại: ${supaMsg(e)}. Thử lại với file .xlsx, .xls hoặc .csv khác.`,
       );
-      setParsed(
-        unique.map((r) => ({
-          ...r,
-          alreadyExists: existingKeys.has(`${norm(r.fullName)}|${norm(r.className)}`),
-        })),
-      );
-    } catch {
-      setImportError('Đọc file thất bại. Thử lại với file .xlsx hoặc .csv khác.');
-      setParsed([]);
     }
   };
 
@@ -309,13 +350,11 @@ export function AdminCertificates() {
       setParsed([]);
       await fetchCertificates();
     } catch (e) {
-      const msg = e instanceof Error ? e.message : '';
+      const msg = supaMsg(e);
       setImportError(
         /row-level security/i.test(msg)
           ? 'Nhập thất bại do bảng đang bật bảo mật dòng (RLS) mà chưa có policy cho phép ghi. Vào Supabase Dashboard → Table Editor → bảng certificate_records → Policies → tạo policy cho phép INSERT, UPDATE, DELETE với người dùng đã đăng nhập (authenticated), rồi thử nhập lại.'
-          : msg
-            ? `Nhập thất bại: ${msg}`
-            : 'Nhập thất bại. Kiểm tra lại quyền ghi vào bảng certificate_records.',
+          : `Nhập thất bại: ${msg}`,
       );
     } finally {
       setImporting(false);
