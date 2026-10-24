@@ -54,11 +54,9 @@ const ORG_LOGOS = [
   { src: '/logos/khoa-moi-truong-sticker.png', alt: 'Khoa Môi trường' },
 ];
 
-/* Ảnh nền Hero — ✏️ ĐỔI ẢNH CỦA BẠN:
-   Lưu ảnh chụp sự kiện (1920px trở lên) vào thư mục public với tên hero.jpg
-   rồi thay đường dẫn dưới thành '/hero.jpg' */
-const HERO_IMAGE =
-  'https://images.unsplash.com/photo-1552674605-db6ffd4facb5?auto=format&fit=crop&w=1920&q=80';
+/* Ảnh nền Hero — ảnh thật GEOENV RUN mùa 1 (02/11/2025), chụp trước backdrop
+   của hai Khoa. File nằm ở public/hero.jpg (bản nén 1920px từ album BTC). */
+const HERO_IMAGE = '/hero.jpg';
 
 /* Bộ đếm ngược — tự cập nhật mỗi giây */
 function useCountdown(target: string) {
