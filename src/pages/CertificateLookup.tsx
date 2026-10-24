@@ -157,13 +157,26 @@ export function CertificateLookup() {
   /* Cổng khóa khu vực công khai: khách thấy thông báo tạm khóa, admin đã đăng nhập vẫn dùng */
   const lock = usePublicLock();
 
-  /* Tải danh sách (dùng chung bộ nhớ đệm với nút tìm) để gợi ý không cần bấm tìm */
+  /* Tải danh sách (dùng chung bộ nhớ đệm với nút tìm) để gợi ý không cần bấm tìm.
+     BẢO MẬT: danh sách này KHÔNG kèm link giấy chứng nhận — link chỉ lấy riêng
+     cho đúng người vừa khớp (xem fetchCertUrl), nên không ai quét được hết 402 link
+     chỉ bằng cách tải danh sách. */
   const ensureRows = async (): Promise<Record<string, any>[]> => {
     if (rowsCache.current) return rowsCache.current;
-    const { data, error: supabaseError } = await supabase.from('certificate_records').select('*');
+    const { data, error: supabaseError } = await supabase.rpc('list_certificates_public');
     if (supabaseError) throw supabaseError;
-    rowsCache.current = data || [];
+    rowsCache.current = (data as Record<string, any>[]) || [];
     return rowsCache.current;
+  };
+
+  /* Link giấy chứng nhận của đúng 1 người (theo id, không đoán được) — chỉ gọi sau
+     khi đã khớp tên/lớp, và chỉ trả về khi người đó đủ điều kiện nhận giấy. */
+  const fetchCertUrl = async (id: string): Promise<string | null> => {
+    const { data, error: supabaseError } = await supabase.rpc('get_certificate_url', { p_id: id });
+    if (supabaseError) throw supabaseError;
+    if (typeof data === 'string') return data;
+    if (Array.isArray(data)) return (data[0] as any)?.certificate_url ?? null;
+    return (data as any)?.certificate_url ?? null;
   };
 
   /* Gợi ý lớp: gõ tên trước thì ưu tiên lớp của đúng người đó; chưa gõ tên thì gợi
@@ -264,10 +277,9 @@ export function CertificateLookup() {
   /* Ẩn khung xem trước nếu ảnh không tải được (nút tải vẫn hoạt động bình thường) */
   const [previewFailed, setPreviewFailed] = useState(false);
 
-  /* Kết quả cho 1 bản ghi: đủ điều kiện -> tải; bị khóa -> hiện lý do, không cho tải */
-  const resolveRecord = (record: Record<string, any>): SearchResult => {
-    /* ✏️ Link giấy chứng nhận là cột "certificate_url" trong bảng Supabase */
-    const certUrl = record.certificate_url ?? null;
+  /* Kết quả cho 1 bản ghi: đủ điều kiện -> tải; bị khóa -> hiện lý do, không cho tải.
+     Người bị khóa không bao giờ được lấy link (hàm lấy link cũng chặn phía server). */
+  const resolveRecord = async (record: Record<string, any>): Promise<SearchResult> => {
     if (!record.is_eligible) {
       return {
         found: true,
@@ -280,6 +292,7 @@ export function CertificateLookup() {
         lockReason: record.violation_reason ?? null,
       };
     }
+    const certUrl = await fetchCertUrl(record.id);
     return {
       found: true,
       unique: true,
@@ -323,18 +336,17 @@ export function CertificateLookup() {
         return;
       }
 
-      /* Lấy toàn bộ bảng rồi khớp phía client — bảng chỉ vài trăm dòng nên vẫn nhẹ,
-         đổi lại khớp được không dấu, viết đầy đủ/viết tắt và gợi ý lớp khi gõ lệch.
-         Danh sách chỉ tải 1 lần rồi giữ trong bộ nhớ của trang. */
+      /* Lấy danh sách (KHÔNG kèm link giấy) rồi khớp phía client — bảng chỉ vài trăm
+         dòng nên vẫn nhẹ, đổi lại khớp được không dấu, viết đầy đủ/viết tắt và gợi ý
+         lớp khi gõ lệch. Danh sách chỉ tải 1 lần rồi giữ trong bộ nhớ của trang.
+         Link giấy chỉ lấy riêng cho người vừa khớp (trong resolveRecord). */
       let all: Record<string, any>[];
       if (rowsCache.current) {
         all = rowsCache.current;
       } else {
-        const { data, error: supabaseError } = await supabase
-          .from('certificate_records')
-          .select('*');
+        const { data, error: supabaseError } = await supabase.rpc('list_certificates_public');
         if (supabaseError) throw supabaseError;
-        all = data || [];
+        all = (data as Record<string, any>[]) || [];
         rowsCache.current = all;
       }
 
@@ -349,7 +361,7 @@ export function CertificateLookup() {
       /* Không gõ lớp: tên chỉ khớp 1 người thì hiện luôn, nhiều người thì cho chọn lớp */
       if (!classTyped) {
         if (nameMatches.length === 1) {
-          setResult(resolveRecord(nameMatches[0]));
+          setResult(await resolveRecord(nameMatches[0]));
         } else {
           setCandidateRows(nameMatches);
           setCandidates(uniqueClasses(nameMatches));
@@ -387,7 +399,7 @@ export function CertificateLookup() {
           lockReason: null,
         });
       } else {
-        setResult(resolveRecord(exactMatches[0]));
+        setResult(await resolveRecord(exactMatches[0]));
       }
     } catch {
       setError('Có lỗi xảy ra khi tra cứu. Vui lòng thử lại sau.');
@@ -410,10 +422,15 @@ export function CertificateLookup() {
     return out;
   };
 
-  const handlePickCandidate = (c: Candidate) => {
+  const handlePickCandidate = async (c: Candidate) => {
     const rows = (candidateRows || []).filter((r) => strip(r.class_name) === strip(c.className));
     if (rows.length === 1) {
-      setResult(resolveRecord(rows[0]));
+      try {
+        setResult(await resolveRecord(rows[0]));
+      } catch {
+        setError('Có lỗi xảy ra khi lấy link giấy chứng nhận. Vui lòng thử lại sau.');
+        return;
+      }
       setPreviewFailed(false);
       setCandidates(null);
     } else if (rows.length > 1) {
