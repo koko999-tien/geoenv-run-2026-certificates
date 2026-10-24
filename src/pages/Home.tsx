@@ -6,6 +6,7 @@ import {
   Calendar,
   Camera,
   Clock3,
+  Crown,
   Flag,
   Heart,
   Image as ImageIcon,
@@ -236,25 +237,35 @@ export function Home() {
         </div>
       </section>
 
-      {/* ================= DÃY SỐ LIỆU NỔI BẬT ================= */}
+      {/* ================= DẢI VINH DANH 60 NĂM + 3 CHỈ SỐ GIẢI ĐẤU ================= */}
       <section className="bg-gradient-to-r from-geoenv-800 via-geoenv-700 to-geoenv-800 py-8 sm:py-10">
-        <div className="mx-auto grid max-w-5xl grid-cols-2 gap-6 px-4 sm:px-6 lg:grid-cols-4">
-          {[
-            { icon: Flag, value: '85', label: 'Đội tham gia' },
-            { icon: Users, value: '425', label: 'Vận động viên' },
-            { icon: Route, value: '10 KM', label: 'Cự ly Ekiden' },
-            { icon: Sparkles, value: '60 năm', label: 'Thành lập HUMG' },
-          ].map((stat) => (
-            <div key={stat.label} className="text-center">
-              <stat.icon className="mx-auto h-5 w-5 text-geoenv-200" />
-              <p className="mt-2 text-2xl font-extrabold tracking-tight text-white sm:text-3xl">
-                {stat.value}
-              </p>
-              <p className="mt-0.5 text-xs font-medium uppercase tracking-wider text-geoenv-200 sm:text-sm sm:normal-case sm:tracking-normal">
-                {stat.label}
-              </p>
-            </div>
-          ))}
+        <div className="mx-auto max-w-5xl px-4 sm:px-6">
+          {/* Dải băng vinh danh — đặt trang trọng ở vị trí cao nhất của khối */}
+          <div className="flex justify-center">
+            <p className="inline-flex max-w-full items-center justify-center gap-2 rounded-full border border-white/20 bg-white/10 px-4 py-1.5 text-center text-xs font-semibold tracking-wide text-yellow-300 backdrop-blur-md md:text-sm">
+              <Crown className="h-4 w-4 shrink-0" />
+              HƯỚNG TỚI KỶ NIỆM 60 NĂM THÀNH LẬP TRƯỜNG ĐH MỎ – ĐỊA CHẤT (1966 – 2026)
+            </p>
+          </div>
+
+          {/* Đúng 3 chỉ số kỹ thuật của giải — đối xứng 3 cột trên mọi màn hình */}
+          <div className="mx-auto mt-8 grid max-w-3xl grid-cols-3 gap-4 sm:gap-6">
+            {[
+              { icon: Flag, value: '85', label: 'Đội thi đấu' },
+              { icon: Users, value: '425', label: 'Vận động viên' },
+              { icon: Route, value: '10 KM', label: 'Cự ly tiếp sức Ekiden' },
+            ].map((stat) => (
+              <div key={stat.label} className="text-center">
+                <stat.icon className="mx-auto h-5 w-5 text-geoenv-200" />
+                <p className="mt-2 text-2xl font-extrabold tracking-tight text-white sm:text-3xl">
+                  {stat.value}
+                </p>
+                <p className="mt-0.5 text-xs font-medium uppercase tracking-wider text-geoenv-200 sm:text-sm sm:normal-case sm:tracking-normal">
+                  {stat.label}
+                </p>
+              </div>
+            ))}
+          </div>
         </div>
       </section>
 
