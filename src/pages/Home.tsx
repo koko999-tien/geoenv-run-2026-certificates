@@ -1,6 +1,23 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ArrowRight, Award, Calendar, Clock3, Image as ImageIcon, MapPin, Users } from 'lucide-react';
+import {
+  ArrowRight,
+  Award,
+  Calendar,
+  Camera,
+  Clock3,
+  Flag,
+  Heart,
+  Image as ImageIcon,
+  Mail,
+  MapPin,
+  Medal,
+  Route,
+  Share2,
+  Sparkles,
+  Trophy,
+  Users,
+} from 'lucide-react';
 
 /* ============================================================
    ✏️ SỬA NỘI DUNG SỰ KIỆN TẠI ĐÂY — toàn trang tự cập nhật theo.
@@ -9,13 +26,15 @@ const EVENT = {
   name: 'GEOENV RUN 2026',
   tagline: 'Bước chân Địa chất – Môi trường',
   intro:
-    'Giải chạy 10KM EKIDEN do Khoa Khoa học Kỹ thuật Địa chất phối hợp Khoa Môi trường, Trường Đại học Mỏ – Địa chất tổ chức. Tra cứu giấy chứng nhận và xem album ảnh ngay tại website này.',
+    'Giải chạy tiếp sức Ekiden 10KM do Liên chi Đoàn Khoa Khoa học và Kỹ thuật Địa chất phối hợp Liên chi Đoàn Khoa Môi trường tổ chức — hướng tới kỷ niệm 60 năm thành lập Trường Đại học Mỏ – Địa chất và chào đón tân sinh viên K71. Tra cứu giấy chứng nhận và xem album ảnh ngay tại website này.',
   dateText: 'Chủ nhật, 25/10/2026',
   placeText: 'Trường Đại học Mỏ – Địa chất',
+  placeDetail:
+    'Đường nội khu cạnh giảng đường A1, Khu Đô thị Đại học, Trường Đại học Mỏ – Địa chất (đối diện Trường THCS & THPT Đoàn Thị Điểm)',
   /* ✏️ QUAN TRỌNG: thời điểm giải chạy bắt đầu (dùng để đếm ngược) */
   startAt: '2026-10-25T06:00:00+07:00',
   hosts: [
-    'Khoa Khoa học Kỹ thuật Địa chất',
+    'Khoa Khoa học và Kỹ thuật Địa chất',
     'Khoa Môi trường',
     'Trường Đại học Mỏ – Địa chất',
   ],
@@ -219,6 +238,232 @@ export function Home() {
               </div>
             ))}
           </div>
+          <p className="mx-auto mt-5 flex max-w-2xl items-start justify-center gap-1.5 text-center text-sm text-slate-500">
+            <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-geoenv-500" />
+            <span>
+              <span className="font-semibold text-slate-700">Cung đường thi đấu:</span>{' '}
+              {EVENT.placeDetail}
+            </span>
+          </p>
+        </div>
+      </section>
+
+      {/* ================= GIỚI THIỆU & THỂ THỨC THI ĐẤU ================= */}
+      <section className="bg-white py-14 sm:py-16">
+        <div className="mx-auto max-w-5xl px-4 sm:px-6">
+          <h2 className="text-center text-xs font-bold uppercase tracking-[0.2em] text-geoenv-600">
+            Giới thiệu giải chạy
+          </h2>
+          <p className="mx-auto mt-5 max-w-3xl text-center text-sm leading-relaxed text-slate-600 sm:text-base">
+            GEOENV RUN Season 2 – “Bước chân Địa chất &amp; Môi trường” là sân chơi thể thao
+            lành mạnh nhằm thúc đẩy phong trào rèn luyện sức khỏe, tăng cường giao lưu, kết
+            nối giữa cán bộ, giảng viên và sinh viên hai Khoa Địa chất – Môi trường nói
+            riêng, sinh viên toàn trường nói chung — với tinh thần{' '}
+            <span className="font-semibold text-geoenv-700">
+              “Chạy vì sức khỏe, vì cộng đồng”
+            </span>
+            .
+          </p>
+
+          <h3 className="mt-12 text-center text-2xl font-bold text-slate-900">
+            Thể thức thi đấu
+          </h3>
+          <div className="mt-7 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {[
+              {
+                icon: Flag,
+                title: 'Chạy tiếp sức Ekiden',
+                text: 'Mỗi đội gồm 05 vận động viên, thi đấu theo hình thức tiếp sức đồng đội.',
+              },
+              {
+                icon: Route,
+                title: '2 km mỗi người – 10 km mỗi đội',
+                text: 'Mỗi vận động viên chạy 2 km, cả đội chinh phục tổng cự ly 10 km.',
+              },
+              {
+                icon: Users,
+                title: 'Ít nhất 01 VĐV nữ mỗi đội',
+                text: 'Cơ cấu đội bắt buộc có tối thiểu 01 vận động viên nữ trong 05 thành viên.',
+              },
+              {
+                icon: Clock3,
+                title: 'Ghi nhận bằng Strava',
+                text: 'Thành tích quãng đường và thời gian của từng vận động viên được ghi nhận qua ứng dụng Strava.',
+              },
+              {
+                icon: Sparkles,
+                title: 'Quy mô mùa 2',
+                text: '85 đội thi với 425 vận động viên đến từ các lớp, khoa trong toàn trường.',
+              },
+              {
+                icon: Award,
+                title: 'Chứng nhận cho VĐV',
+                text: 'Vận động viên hoàn thành phần thi nhận giấy chứng nhận — tra cứu và tải về ngay tại website này.',
+              },
+            ].map((item) => (
+              <div
+                key={item.title}
+                className="card flex items-start gap-3.5 p-5 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md"
+              >
+                <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-geoenv-50 ring-1 ring-geoenv-100">
+                  <item.icon className="h-5 w-5 text-geoenv-600" />
+                </span>
+                <div>
+                  <p className="text-sm font-bold text-slate-900 sm:text-[15px]">{item.title}</p>
+                  <p className="mt-1 text-sm leading-relaxed text-slate-600">{item.text}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ================= GIẢI THƯỞNG ================= */}
+      <section className="py-14 sm:py-16">
+        <div className="mx-auto max-w-5xl px-4 sm:px-6">
+          <h2 className="text-center text-xs font-bold uppercase tracking-[0.2em] text-geoenv-600">
+            Cơ cấu giải thưởng
+          </h2>
+          <div className="mt-7 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            {[
+              {
+                icon: Trophy,
+                medal: '🥇',
+                title: 'Giải Nhất',
+                prize: '1.500.000đ',
+                note: 'Kèm huy chương và giấy chứng nhận cho cả đội.',
+                accent: 'bg-amber-50 ring-amber-100 text-amber-600',
+              },
+              {
+                icon: Trophy,
+                medal: '🥈',
+                title: 'Giải Nhì',
+                prize: '1.000.000đ',
+                note: 'Kèm huy chương và giấy chứng nhận cho cả đội.',
+                accent: 'bg-slate-100 ring-slate-200 text-slate-500',
+              },
+              {
+                icon: Trophy,
+                medal: '🥉',
+                title: 'Giải Ba',
+                prize: '500.000đ',
+                note: 'Kèm huy chương và giấy chứng nhận cho cả đội.',
+                accent: 'bg-orange-50 ring-orange-100 text-orange-600',
+              },
+              {
+                icon: Medal,
+                medal: '🏆',
+                title: 'VĐV nam xuất sắc nhất',
+                prize: '300.000đ',
+                note: 'Dành cho vận động viên nam có thành tích chạy 2 km nhanh nhất.',
+                accent: 'bg-geoenv-50 ring-geoenv-100 text-geoenv-600',
+              },
+              {
+                icon: Medal,
+                medal: '🏆',
+                title: 'VĐV nữ xuất sắc nhất',
+                prize: '300.000đ',
+                note: 'Dành cho vận động viên nữ có thành tích chạy 2 km nhanh nhất.',
+                accent: 'bg-emerald-50 ring-emerald-100 text-emerald-600',
+              },
+              {
+                icon: Camera,
+                medal: '📸',
+                title: 'Khoảnh khắc ấn tượng',
+                prize: '500.000đ',
+                note: 'Dành cho đội có tổng điểm tương tác cao nhất trên fanpage hai Khoa.',
+                accent: 'bg-rose-50 ring-rose-100 text-rose-600',
+              },
+            ].map((item) => (
+              <div
+                key={item.title}
+                className="card p-5 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md"
+              >
+                <div className="flex items-center justify-between">
+                  <span
+                    className={`flex h-11 w-11 items-center justify-center rounded-xl ring-1 ${item.accent}`}
+                  >
+                    <item.icon className="h-5 w-5" />
+                  </span>
+                  <span className="text-2xl" aria-hidden>
+                    {item.medal}
+                  </span>
+                </div>
+                <p className="mt-4 text-sm font-bold text-slate-900 sm:text-[15px]">
+                  {item.title}
+                </p>
+                <p className="mt-1 text-xl font-black tracking-tight text-geoenv-700">
+                  {item.prize}
+                </p>
+                <p className="mt-1.5 text-sm leading-relaxed text-slate-600">{item.note}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* ================= CUỘC THI KHOẢNH KHẮC ẤN TƯỢNG ================= */}
+      <section className="bg-gradient-to-br from-geoenv-950 via-geoenv-900 to-emerald-900 py-14 sm:py-16">
+        <div className="mx-auto max-w-5xl px-4 sm:px-6">
+          <div className="text-center">
+            <span className="inline-flex items-center gap-2 rounded-full border border-white/25 bg-white/10 px-4 py-1.5 text-xs font-semibold tracking-wide text-white backdrop-blur">
+              <Camera className="h-4 w-4" />
+              Cuộc thi ảnh
+            </span>
+            <h2 className="mt-4 text-2xl font-bold text-white sm:text-3xl">
+              Khoảnh khắc ấn tượng GEOENV RUN 2026
+            </h2>
+            <p className="mx-auto mt-3 max-w-2xl text-sm leading-relaxed text-white/85 sm:text-base">
+              Mỗi đội gửi 01 bức ảnh ấn tượng nhất chụp trong thời gian diễn ra giải chạy.
+              Ban tổ chức đăng ảnh lên fanpage của hai Khoa để khán giả bình chọn — đội có
+              tổng điểm cao nhất nhận giải <span className="font-bold text-white">500.000đ</span>.
+            </p>
+          </div>
+
+          <div className="mt-9 grid grid-cols-1 gap-4 sm:grid-cols-3">
+            <div className="rounded-2xl border border-white/15 bg-white/10 p-5 backdrop-blur">
+              <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-white/15">
+                <Mail className="h-5 w-5 text-white" />
+              </span>
+              <p className="mt-3.5 text-sm font-bold text-white">1. Gửi ảnh dự thi</p>
+              <p className="mt-1 text-sm leading-relaxed text-white/80">
+                Gửi về email{' '}
+                <a
+                  href="mailto:lienchidiachat.humg@gmail.com"
+                  className="font-semibold text-white underline decoration-white/40 underline-offset-2 hover:decoration-white"
+                >
+                  lienchidiachat.humg@gmail.com
+                </a>{' '}
+                với tiêu đề “KHOẢNH KHẮC ẤN TƯỢNG”, kèm tên đội và slogan của đội — trước{' '}
+                <span className="font-semibold text-white">20h00 ngày 27/10/2026</span>.
+              </p>
+            </div>
+            <div className="rounded-2xl border border-white/15 bg-white/10 p-5 backdrop-blur">
+              <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-white/15">
+                <Heart className="h-5 w-5 text-white" />
+              </span>
+              <p className="mt-3.5 text-sm font-bold text-white">2. Bình chọn trên fanpage</p>
+              <p className="mt-1 text-sm leading-relaxed text-white/80">
+                Like fanpage hai Khoa, share bài dự thi về trang cá nhân ở chế độ công khai
+                và kêu gọi mọi người thả reaction, share cho ảnh của đội mình.
+              </p>
+            </div>
+            <div className="rounded-2xl border border-white/15 bg-white/10 p-5 backdrop-blur">
+              <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-white/15">
+                <Share2 className="h-5 w-5 text-white" />
+              </span>
+              <p className="mt-3.5 text-sm font-bold text-white">3. Cách tính điểm</p>
+              <p className="mt-1 text-sm leading-relaxed text-white/80">
+                Mỗi lượt share kèm hashtag sự kiện = <span className="font-semibold text-white">3 điểm</span>;
+                mỗi reaction like/love/care = <span className="font-semibold text-white">1 điểm</span>.
+                Thời gian bình chọn: 3 ngày kể từ khi BTC đăng bài.
+              </p>
+            </div>
+          </div>
+
+          <p className="mt-6 text-center text-xs text-white/60">
+            Lưu ý: tài khoản hoặc bài dự thi dùng thủ thuật like/share ảo sẽ không được tính điểm.
+          </p>
         </div>
       </section>
 

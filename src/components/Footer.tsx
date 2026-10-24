@@ -42,22 +42,53 @@ export function Footer() {
             <h4 className="text-xs font-semibold uppercase tracking-wider text-slate-500">Đơn vị tổ chức</h4>
             <ul className="mt-4 space-y-2 text-sm text-slate-400">
               <li>Trường Đại học Mỏ – Địa chất</li>
-              <li>Khoa Khoa học Kỹ thuật Địa chất</li>
-              <li>Khoa Môi trường</li>
+              <li>Liên chi Đoàn Khoa Khoa học và Kỹ thuật Địa chất</li>
+              <li>Liên chi Đoàn Khoa Môi trường</li>
             </ul>
           </div>
 
-          {/* Liên hệ — ✏️ sửa email / số điện thoại tại đây */}
+          {/* Liên hệ Ban tổ chức — thông tin chính thức từ fanpage hai Khoa */}
           <div>
-            <h4 className="text-xs font-semibold uppercase tracking-wider text-slate-500">Liên hệ</h4>
+            <h4 className="text-xs font-semibold uppercase tracking-wider text-slate-500">Liên hệ Ban tổ chức</h4>
             <ul className="mt-4 space-y-2 text-sm text-slate-400">
               <li>
-                Email:{' '}
-                <a href="mailto:duron62789@gmail.com" className="text-geoenv-400 transition-colors hover:text-geoenv-300">
-                  duron62789@gmail.com
+                Khoa KH&amp;KT Địa chất: Đ/c Trần Lăng Dũng —{' '}
+                <a href="tel:0348679721" className="text-geoenv-400 transition-colors hover:text-geoenv-300">
+                  0348 679 721
                 </a>
               </li>
-              <li>Điện thoại: 0326881352</li>
+              <li>
+                Khoa Môi trường: Đ/c Đinh Tuấn Vũ —{' '}
+                <a href="tel:0349575674" className="text-geoenv-400 transition-colors hover:text-geoenv-300">
+                  0349 575 674
+                </a>
+              </li>
+              <li>
+                Email:{' '}
+                <a href="mailto:lienchidiachat.humg@gmail.com" className="text-geoenv-400 transition-colors hover:text-geoenv-300">
+                  lienchidiachat.humg@gmail.com
+                </a>
+              </li>
+              <li>
+                <a
+                  href="https://www.facebook.com/profile.php?id=100063631387817"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-geoenv-400 transition-colors hover:text-geoenv-300"
+                >
+                  Fanpage Khoa KH&amp;KT Địa chất
+                </a>
+              </li>
+              <li>
+                <a
+                  href="https://www.facebook.com/profile.php?id=100075477986231"
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-geoenv-400 transition-colors hover:text-geoenv-300"
+                >
+                  Fanpage Khoa Môi trường
+                </a>
+              </li>
             </ul>
           </div>
         </div>
