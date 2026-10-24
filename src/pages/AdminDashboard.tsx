@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Users, Image as ImageIcon, ShieldCheck, Loader2, FileText, ListChecks } from 'lucide-react';
+import { Users, Image as ImageIcon, ShieldCheck, Loader2, ListChecks } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 
@@ -85,16 +85,14 @@ export function AdminDashboard() {
           title="Quản lý chứng nhận"
           icon={<Users className="h-5 w-5 text-geoenv-600" />}
           items={[
-            { to: '/quan-tri/chung-nhan', label: 'Nhập danh sách từ file Excel', icon: FileText },
-            { to: '/quan-tri/chung-nhan', label: 'Xem danh sách chứng nhận', icon: ListChecks },
+            { to: '/quan-tri/chung-nhan', label: 'Vào quản lý chứng nhận', icon: ListChecks },
           ]}
         />
         <ActionCard
           title="Quản lý thư viện ảnh"
           icon={<ImageIcon className="h-5 w-5 text-emerald-600" />}
           items={[
-            { to: '/quan-tri/anh', label: 'Quản lý album', icon: ImageIcon },
-            { to: '/quan-tri/anh', label: 'Thêm mới ảnh', icon: ImageIcon },
+            { to: '/quan-tri/anh', label: 'Vào thư viện ảnh', icon: ImageIcon },
           ]}
         />
       </div>
