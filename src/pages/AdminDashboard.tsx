@@ -2,7 +2,6 @@ import { useEffect, useState } from 'react';
 import { Users, Image as ImageIcon, ShieldCheck, Loader2, FileText, ListChecks } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
-import { MOCK_ALBUMS, MOCK_PHOTOS } from '../data/mockData';
 
 interface Stats {
   totalCertificates: number;
@@ -16,8 +15,10 @@ export function AdminDashboard() {
   const [stats, setStats] = useState<Stats>({
     totalCertificates: 0,
     eligibleCount: 0,
-    totalAlbums: MOCK_ALBUMS.length,
-    totalPhotos: MOCK_PHOTOS.length,
+    /* Thư viện ảnh thật chưa được ghép vào nên để 0 cho khớp với trang công khai,
+       không lấy số mẫu như trước nữa */
+    totalAlbums: 0,
+    totalPhotos: 0,
     loading: true,
   });
 

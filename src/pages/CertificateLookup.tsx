@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Download, AlertCircle, CheckCircle, Search, Info, Lightbulb } from 'lucide-react';
+import { Download, AlertCircle, CheckCircle, Search, Info, Lightbulb, Lock } from 'lucide-react';
 import { Button } from '../components/Button';
 import { cn } from '../lib/utils';
 import { supabase } from '../lib/supabase';
@@ -12,6 +12,9 @@ interface SearchResult {
   className: string | null;
   message: string;
   certificateUrl: string | null;
+  /* Khóa tải do vi phạm — kèm lý do BTC ghi */
+  locked: boolean;
+  lockReason: string | null;
 }
 
 export function CertificateLookup() {
@@ -55,6 +58,8 @@ export function CertificateLookup() {
           className: null,
           message: 'Chúng tôi chưa tìm thấy giấy chứng nhận khớp với họ tên và lớp bạn nhập.',
           certificateUrl: null,
+          locked: false,
+          lockReason: null,
         });
         setLoading(false);
         return;
@@ -72,6 +77,8 @@ export function CertificateLookup() {
           className: null,
           message: 'Chúng tôi chưa tìm thấy giấy chứng nhận khớp với họ tên và lớp bạn nhập.',
           certificateUrl: null,
+          locked: false,
+          lockReason: null,
         });
       } else if (exactMatches.length > 1) {
         setResult({
@@ -82,19 +89,24 @@ export function CertificateLookup() {
           message:
             'Hệ thống thấy nhiều bản ghi trùng họ tên và lớp. Vui lòng liên hệ ban tổ chức để xác minh nhé.',
           certificateUrl: null,
+          locked: false,
+          lockReason: null,
         });
       } else {
         const record = exactMatches[0];
         /* ✏️ Link giấy chứng nhận là cột "certificate_url" trong bảng Supabase */
         const certUrl = record.certificate_url ?? null;
         if (!record.is_eligible) {
+          /* Bị khóa do vi phạm: không cho tải, hiện lý do + mail BTC */
           setResult({
             found: true,
             unique: true,
             fullName: record.full_name,
             className: record.class_name,
-            message: 'Bạn đã tham gia giải chạy nhưng hiện chưa đủ điều kiện nhận giấy chứng nhận.',
+            message: 'Giấy chứng nhận của bạn đã bị khóa.',
             certificateUrl: null,
+            locked: true,
+            lockReason: record.violation_reason ?? null,
           });
         } else {
           setResult({
@@ -104,6 +116,8 @@ export function CertificateLookup() {
             className: record.class_name,
             message: 'Tìm thấy giấy chứng nhận của bạn rồi! 🎉',
             certificateUrl: certUrl,
+            locked: false,
+            lockReason: null,
           });
         }
       }
@@ -221,13 +235,17 @@ export function CertificateLookup() {
         <div
           className={cn(
             'mt-5 rounded-2xl border p-5',
-            result.found && result.unique
-              ? 'border-emerald-200 bg-emerald-50'
-              : 'border-amber-200 bg-amber-50'
+            result.locked
+              ? 'border-red-200 bg-red-50'
+              : result.found && result.unique
+                ? 'border-emerald-200 bg-emerald-50'
+                : 'border-amber-200 bg-amber-50',
           )}
         >
           <div className="flex items-start gap-3">
-            {result.found && result.unique ? (
+            {result.locked ? (
+              <Lock className="mt-0.5 h-6 w-6 shrink-0 text-red-600" />
+            ) : result.found && result.unique ? (
               <CheckCircle className="mt-0.5 h-6 w-6 shrink-0 text-emerald-600" />
             ) : (
               <Info className="mt-0.5 h-6 w-6 shrink-0 text-amber-600" />
@@ -236,7 +254,11 @@ export function CertificateLookup() {
               <p
                 className={cn(
                   'text-base font-semibold sm:text-lg',
-                  result.found && result.unique ? 'text-emerald-800' : 'text-amber-800'
+                  result.locked
+                    ? 'text-red-800'
+                    : result.found && result.unique
+                      ? 'text-emerald-800'
+                      : 'text-amber-800',
                 )}
               >
                 {result.message}
@@ -249,8 +271,28 @@ export function CertificateLookup() {
                 </p>
               )}
 
-              {/* Trạng thái đủ điều kiện */}
-              {result.found && result.unique && (
+              {/* Bị khóa do vi phạm: không cho tải, hiện lý do + mail BTC */}
+              {result.locked && (
+                <div className="mt-4 space-y-2 rounded-xl border border-red-200 bg-white p-3 text-sm text-red-800">
+                  <p>
+                    <span className="font-semibold">Lý do: </span>
+                    {result.lockReason ?? 'Vi phạm quy chế giải chạy.'}
+                  </p>
+                  <p>
+                    Mọi thắc mắc vui lòng liên hệ Ban tổ chức qua email{' '}
+                    <a
+                      href="mailto:geoenvrun@gmail.com"
+                      className="font-semibold underline hover:text-red-900"
+                    >
+                      geoenvrun@gmail.com
+                    </a>
+                    .
+                  </p>
+                </div>
+              )}
+
+              {/* Trạng thái đủ điều kiện — chỉ hiện khi không bị khóa */}
+              {result.found && result.unique && !result.locked && (
                 <div className="mt-4">
                   {result.certificateUrl ? (
                     <Button variant="primary" className="text-sm" onClick={handleOpenCertificate}>
