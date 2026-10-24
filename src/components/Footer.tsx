@@ -52,16 +52,22 @@ export function Footer() {
             <h4 className="text-xs font-semibold uppercase tracking-wider text-slate-500">Liên hệ Ban tổ chức</h4>
             <ul className="mt-4 space-y-2 text-sm text-slate-400">
               <li>
-                Khoa KH&amp;KT Địa chất: Đ/c Trần Lăng Dũng —{' '}
-                <a href="tel:0348679721" className="text-geoenv-400 transition-colors hover:text-geoenv-300">
-                  0348 679 721
-                </a>
+                <span className="block font-medium text-slate-300">Khoa KH&amp;KT Địa chất</span>
+                <span className="whitespace-nowrap">
+                  Đ/c Trần Lăng Dũng —{' '}
+                  <a href="tel:0348679721" className="text-geoenv-400 transition-colors hover:text-geoenv-300">
+                    0348 679 721
+                  </a>
+                </span>
               </li>
               <li>
-                Khoa Môi trường: Đ/c Đinh Tuấn Vũ —{' '}
-                <a href="tel:0349575674" className="text-geoenv-400 transition-colors hover:text-geoenv-300">
-                  0349 575 674
-                </a>
+                <span className="block font-medium text-slate-300">Khoa Môi trường</span>
+                <span className="whitespace-nowrap">
+                  Đ/c Đinh Tuấn Vũ —{' '}
+                  <a href="tel:0349575674" className="text-geoenv-400 transition-colors hover:text-geoenv-300">
+                    0349 575 674
+                  </a>
+                </span>
               </li>
               <li>
                 Email:{' '}
