@@ -102,7 +102,7 @@ export function Home() {
   return (
     <div>
       {/* ================= HERO — ảnh nền + lớp phủ tối ================= */}
-      <section className="relative isolate overflow-hidden">
+      <section className="relative isolate overflow-hidden lg:flex lg:min-h-[90vh] lg:flex-col lg:items-center lg:justify-center">
         {/* ✏️ Ảnh nền — thay bằng ảnh thật trong public (xem chú thích HERO_IMAGE) */}
         <img
           src={HERO_IMAGE}
@@ -113,7 +113,7 @@ export function Home() {
         {/* Lớp phủ tối mờ để chữ trắng nổi bật (chuẩn chiến dịch truyền thông) */}
         <div className="absolute inset-0 -z-10 bg-gradient-to-br from-geoenv-950/90 via-geoenv-900/75 to-emerald-900/60" />
 
-        <div className="mx-auto max-w-3xl px-4 py-20 text-center sm:py-28">
+        <div className="mx-auto w-full max-w-3xl px-4 py-20 text-center sm:py-28 lg:max-w-4xl">
           {/* 🏛️ Hàng đơn vị tổ chức — chuẩn "hàng tài trợ":
                  nhãn chữ có đường kẻ mảnh hai bên + 5 logo sticker trắng đồng khổ nổi trên nền tối */}
           <div className="mb-6 flex flex-col items-center md:mb-8">
@@ -124,7 +124,7 @@ export function Home() {
             </p>
             {/* Một dải capsule trắng duy nhất chứa cả 5 logo gốc — nền trắng của dải
                 tự làm nền sạch cho mọi logo, giữ nguyên form dáng từng biểu trưng */}
-            <div className="inline-flex max-w-full items-center justify-center gap-3.5 overflow-hidden rounded-full border border-white/60 bg-white/95 px-5 py-2 shadow-lg backdrop-blur-md md:gap-5 md:px-7 md:py-2.5">
+            <div className="inline-flex max-w-full items-center justify-center gap-3.5 overflow-hidden rounded-full border border-white/60 bg-white/95 px-5 py-2 shadow-lg backdrop-blur-md md:gap-5 md:px-7 md:py-2.5 lg:gap-6 lg:px-8 lg:py-2.5">
               {ORG_LOGOS.map((logo) => (
                 <img
                   key={logo.src}
@@ -132,14 +132,14 @@ export function Home() {
                   alt={logo.alt}
                   title={logo.alt}
                   loading="lazy"
-                  className="h-7 w-auto object-contain md:h-9"
+                  className="h-7 w-auto object-contain md:h-9 lg:h-9"
                 />
               ))}
             </div>
           </div>
 
           {/* 1️⃣ Tên sự kiện — chủ thể trung tâm, đứng TRƯỚC khẩu hiệu */}
-          <h1 className="text-4xl font-black tracking-tight text-white sm:text-6xl">
+          <h1 className="text-4xl font-black tracking-tight text-white sm:text-6xl lg:text-7xl">
             {EVENT.name}
           </h1>
 
@@ -163,7 +163,7 @@ export function Home() {
           </div>
 
           {/* ✏️ Đoạn giới thiệu (sửa trong EVENT ở đầu file) */}
-          <p className="mx-auto mt-5 max-w-2xl text-pretty text-sm leading-relaxed text-white/85 sm:text-base">
+          <p className="mx-auto mt-5 max-w-2xl text-pretty text-sm leading-relaxed text-white/85 sm:text-base lg:max-w-3xl">
             {EVENT.intro}
           </p>
 
@@ -179,7 +179,7 @@ export function Home() {
                 🎉 Sự kiện đang diễn ra — chúc các vận động viên về đích an toàn!
               </p>
             ) : (
-              <div className="inline-flex items-center rounded-2xl border border-white/20 bg-white/10 px-5 py-4 backdrop-blur sm:px-8 sm:py-5">
+              <div className="inline-flex items-center rounded-2xl border border-white/20 bg-white/10 px-5 py-4 backdrop-blur sm:px-8 sm:py-5 lg:px-10 lg:py-6">
                 <div className="mr-3 hidden flex-col items-start sm:flex">
                   <Clock3 className="h-5 w-5 text-geoenv-300" />
                   <span className="mt-1 text-[11px] font-semibold uppercase tracking-wider text-white/70">
@@ -187,8 +187,8 @@ export function Home() {
                   </span>
                 </div>
                 {countdownCells.map((cell) => (
-                  <div key={cell.label} className="w-14 text-center sm:w-16">
-                    <div className="text-2xl font-bold tabular-nums text-white sm:text-3xl">
+                  <div key={cell.label} className="w-14 text-center sm:w-16 lg:w-20">
+                    <div className="text-2xl font-bold tabular-nums text-white sm:text-3xl lg:text-4xl">
                       {cell.value}
                     </div>
                     <div className="mt-0.5 text-[10px] font-medium uppercase tracking-wider text-white/60 sm:text-xs">
@@ -204,7 +204,7 @@ export function Home() {
 
       {/* ================= CHỨC NĂNG CHÍNH — ngay dưới banner, chạm 1 cái là tới ================= */}
       <section className="py-10 sm:py-12">
-        <div className="mx-auto max-w-5xl px-4 sm:px-6">
+        <div className="mx-auto max-w-5xl px-4 sm:px-6 lg:max-w-7xl lg:px-8">
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             {/* Ô 1: Tra cứu giấy chứng nhận — chức năng quan trọng nhất, luôn ở đầu trang */}
             <Link to="/tra-cuu" className="group block">
@@ -246,8 +246,8 @@ export function Home() {
       </section>
 
       {/* ================= DẢI VINH DANH 60 NĂM + 3 CHỈ SỐ GIẢI ĐẤU ================= */}
-      <section className="bg-gradient-to-r from-geoenv-800 via-geoenv-700 to-geoenv-800 py-8 sm:py-10">
-        <div className="mx-auto max-w-5xl px-4 sm:px-6">
+      <section className="bg-gradient-to-r from-geoenv-800 via-geoenv-700 to-geoenv-800 py-8 sm:py-10 lg:py-16">
+        <div className="mx-auto max-w-5xl px-4 sm:px-6 lg:max-w-7xl lg:px-8">
           {/* Dải băng vinh danh — đặt trang trọng ở vị trí cao nhất của khối */}
           <div className="flex justify-center">
             <p className="inline-flex max-w-full items-center justify-center gap-2 rounded-full border border-white/20 bg-white/10 px-4 py-1.5 text-center text-xs font-semibold tracking-wide text-yellow-300 backdrop-blur-md md:text-sm">
@@ -265,7 +265,7 @@ export function Home() {
             ].map((stat) => (
               <div key={stat.label} className="text-center">
                 <stat.icon className="mx-auto h-5 w-5 text-geoenv-200" />
-                <p className="mt-2 text-2xl font-extrabold tracking-tight text-white sm:text-3xl">
+                <p className="mt-2 text-2xl font-extrabold tracking-tight text-white sm:text-3xl lg:text-5xl lg:font-black">
                   {stat.value}
                 </p>
                 <p className="mt-0.5 text-xs font-medium uppercase tracking-wider text-geoenv-200 sm:text-sm sm:normal-case sm:tracking-normal">
@@ -279,15 +279,15 @@ export function Home() {
 
       {/* ================= THÔNG TIN SỰ KIỆN (thẻ trắng trên nền sáng) ================= */}
       <section className="py-14 sm:py-16">
-        <div className="mx-auto max-w-5xl px-4 sm:px-6">
+        <div className="mx-auto max-w-5xl px-4 sm:px-6 lg:max-w-7xl lg:px-8">
           <h2 className="text-center text-xs font-bold uppercase tracking-[0.2em] text-geoenv-600">
             Thông tin sự kiện
           </h2>
-          <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-3">
+          <div className="mt-6 grid grid-cols-1 gap-4 sm:grid-cols-3 lg:gap-8">
             {infoItems.map((item) => (
               <div
                 key={item.label}
-                className="card flex flex-col items-center p-5 text-center transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md"
+                className="card flex flex-col items-center p-5 text-center transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md lg:p-8"
               >
                 <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-geoenv-50 ring-1 ring-geoenv-100">
                   <item.icon className="h-5 w-5 text-geoenv-600" />
@@ -315,7 +315,7 @@ export function Home() {
 
       {/* ================= GIỚI THIỆU & THỂ THỨC THI ĐẤU ================= */}
       <section className="bg-white py-14 sm:py-16">
-        <div className="mx-auto max-w-5xl px-4 sm:px-6">
+        <div className="mx-auto max-w-5xl px-4 sm:px-6 lg:max-w-7xl lg:px-8">
           <h2 className="text-center text-xs font-bold uppercase tracking-[0.2em] text-geoenv-600">
             Giới thiệu giải chạy
           </h2>
@@ -393,7 +393,7 @@ export function Home() {
 
       {/* ================= GIẢI THƯỞNG ================= */}
       <section className="py-14 sm:py-16">
-        <div className="mx-auto max-w-5xl px-4 sm:px-6">
+        <div className="mx-auto max-w-5xl px-4 sm:px-6 lg:max-w-7xl lg:px-8">
           <h2 className="text-center text-xs font-bold uppercase tracking-[0.2em] text-geoenv-600">
             Cơ cấu giải thưởng
           </h2>
@@ -477,7 +477,7 @@ export function Home() {
 
       {/* ================= CUỘC THI KHOẢNH KHẮC ẤN TƯỢNG ================= */}
       <section className="bg-gradient-to-br from-geoenv-950 via-geoenv-900 to-emerald-900 py-14 sm:py-16">
-        <div className="mx-auto max-w-5xl px-4 sm:px-6">
+        <div className="mx-auto max-w-5xl px-4 sm:px-6 lg:max-w-7xl lg:px-8">
           <div className="text-center">
             <span className="inline-flex items-center gap-2 rounded-full border border-white/25 bg-white/10 px-4 py-1.5 text-xs font-semibold tracking-wide text-white backdrop-blur">
               <Camera className="h-4 w-4" />
