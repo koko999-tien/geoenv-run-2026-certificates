@@ -32,8 +32,10 @@ const EVENT = {
   placeText: 'Trường Đại học Mỏ – Địa chất',
   placeDetail:
     'Đường nội khu cạnh giảng đường A1, Khu Đô thị Đại học, Trường Đại học Mỏ – Địa chất (đối diện Trường THCS & THPT Đoàn Thị Điểm)',
-  /* ✏️ QUAN TRỌNG: thời điểm giải chạy bắt đầu (dùng để đếm ngược) */
-  startAt: '2026-10-25T06:00:00+07:00',
+  /* ✏️ QUAN TRỌNG: mốc đếm ngược = 5h30 tập trung sáng 25/10 (trừ 30 phút so với
+     giờ xuất phát 6h00 theo yêu cầu của Tiến — đừng sửa lại thành 6h00).
+     Qua mốc này đồng hồ chuyển sang trạng thái "đang diễn ra". */
+  startAt: '2026-10-25T05:30:00+07:00',
   hosts: [
     'Khoa Khoa học và Kỹ thuật Địa chất',
     'Khoa Môi trường',
@@ -77,7 +79,7 @@ function useCountdown(target: string) {
     minutes: Math.floor(remaining / 60000) % 60,
     seconds: Math.floor(remaining / 1000) % 60,
     isStarted: remaining === 0,
-    /* Sau ngày thi đấu (quá 24 giờ kể từ giờ xuất phát) thì giải đã kết thúc */
+    /* Sau ngày thi đấu (quá 24 giờ kể từ mốc đếm ngược 5h30) thì giải đã kết thúc */
     isEnded: now >= startTime + 86400000,
   };
 }
@@ -114,7 +116,7 @@ export function Home() {
         {/* Lớp phủ tối mờ để chữ trắng nổi bật (chuẩn chiến dịch truyền thông) */}
         <div className="absolute inset-0 -z-10 bg-gradient-to-br from-geoenv-950/90 via-geoenv-900/75 to-emerald-900/60" />
 
-        <div className="mx-auto w-full max-w-3xl px-4 py-20 text-center sm:py-28 lg:max-w-4xl">
+        <div className="mx-auto w-full max-w-3xl px-4 py-12 text-center sm:py-28 lg:max-w-4xl">
           {/* 🏛️ Hàng đơn vị tổ chức — chuẩn "hàng tài trợ":
                  nhãn chữ có đường kẻ mảnh hai bên + 5 logo sticker trắng đồng khổ nổi trên nền tối */}
           <div className="mb-6 flex flex-col items-center md:mb-8">
@@ -125,7 +127,7 @@ export function Home() {
             </p>
             {/* Một dải capsule trắng duy nhất chứa cả 5 logo gốc — nền trắng của dải
                 tự làm nền sạch cho mọi logo, giữ nguyên form dáng từng biểu trưng */}
-            <div className="inline-flex max-w-full items-center justify-center gap-3.5 overflow-hidden rounded-full border border-white/60 bg-white/95 px-5 py-2 shadow-lg backdrop-blur-md md:gap-5 md:px-7 md:py-2.5 lg:gap-6 lg:px-8 lg:py-2.5">
+            <div className="inline-flex max-w-full items-center justify-center gap-2.5 overflow-hidden rounded-full border border-white/60 bg-white/95 px-4 py-2 shadow-lg backdrop-blur-md sm:gap-3.5 sm:px-5 md:gap-5 md:px-7 md:py-2.5 lg:gap-6 lg:px-8 lg:py-2.5">
               {ORG_LOGOS.map((logo) => (
                 <img
                   key={logo.src}
@@ -133,7 +135,7 @@ export function Home() {
                   alt={logo.alt}
                   title={logo.alt}
                   loading="lazy"
-                  className="h-7 w-auto object-contain md:h-9 lg:h-9"
+                  className="h-6 w-auto object-contain sm:h-7 md:h-9 lg:h-9"
                 />
               ))}
             </div>
@@ -169,7 +171,7 @@ export function Home() {
           </p>
 
           {/* ============ BỘ ĐẾM NGƯỢC (thẻ kính mờ trên nền ảnh) ============ */}
-          <div className="mt-12">
+          <div className="mt-8 sm:mt-12">
             {isEnded ? (
               <p className="inline-flex items-center gap-2 rounded-2xl border border-white/25 bg-white/10 px-5 py-3 text-sm font-semibold text-white backdrop-blur sm:text-base">
                 🎉 Giải chạy đã diễn ra thành công — mời bạn tra cứu giấy chứng nhận và xem ảnh
@@ -269,7 +271,7 @@ export function Home() {
                 <p className="mt-2 text-2xl font-extrabold tracking-tight text-white sm:text-3xl lg:text-5xl lg:font-black">
                   {stat.value}
                 </p>
-                <p className="mt-0.5 text-xs font-medium uppercase tracking-wider text-geoenv-200 sm:text-sm sm:normal-case sm:tracking-normal">
+                <p className="mt-0.5 text-[11px] font-medium normal-case leading-snug tracking-normal text-geoenv-200 sm:text-sm">
                   {stat.label}
                 </p>
               </div>
