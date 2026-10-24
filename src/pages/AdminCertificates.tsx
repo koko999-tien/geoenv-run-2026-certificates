@@ -382,7 +382,9 @@ export function AdminCertificates() {
       setImportError(
         /row-level security/i.test(msg)
           ? 'Nhập thất bại do bảng đang bật bảo mật dòng (RLS) mà chưa có policy cho phép ghi. Vào Supabase Dashboard → Table Editor → bảng certificate_records → Policies → tạo policy cho phép INSERT, UPDATE, DELETE với người dùng đã đăng nhập (authenticated), rồi thử nhập lại.'
-          : `Nhập thất bại: ${msg}`,
+          : /permission denied/i.test(msg)
+            ? 'Nhập thất bại do tài khoản quản trị chưa được cấp quyền ghi vào bảng certificate_records. Vào Supabase Dashboard → SQL Editor, chạy: grant select, insert, update, delete on public.certificate_records to authenticated; — rồi bấm nhập lại (không cần chọn lại file).'
+            : `Nhập thất bại: ${msg}`,
       );
     } finally {
       setImporting(false);
