@@ -11,8 +11,6 @@ interface Report {
   category: string;
   name: string | null;
   team: string | null;
-  class_name: string | null;
-  bib_number: string | null;
   contact: string | null;
   content: string;
   is_read: boolean;
@@ -175,9 +173,7 @@ export function AdminFeedback() {
 
               <p className="mt-3 text-xs text-slate-500">
                 Người gửi: {report.name || 'Ẩn danh'}
-                {report.team ? ` • Đội ${report.team}` : ''}
-                {report.class_name ? ` • Lớp ${report.class_name}` : ''}
-                {report.bib_number ? ` • BIB ${report.bib_number}` : ''}
+                {report.team ? ` • ${report.team}` : ''}
                 {report.contact ? ` • Liên hệ: ${report.contact}` : ''}
               </p>
 
