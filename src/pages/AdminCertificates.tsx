@@ -33,6 +33,13 @@ interface ParsedRow {
 
 const norm = (t: string) => t.trim().toLowerCase().replace(/\s+/g, ' ');
 const clean = (t: string) => t.trim().replace(/\s+/g, ' ');
+/* Bỏ dấu tiếng Việt để tìm không dấu cũng ra (gõ "nguyen" vẫn thấy "Nguyễn") */
+const strip = (t: string) =>
+  t
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/đ/g, 'd');
 
 /* Đọc CSV — xử lý ô có dấu ngoặc kép, dấu phẩy trong ô, BOM, xuống dòng CRLF */
 function parseCsv(text: string): string[][] {
@@ -133,6 +140,11 @@ function detectColumns(raw: string[][]): {
 
 export function AdminCertificates() {
   const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState<
+    'all' | 'eligible' | 'locked' | 'hasLink' | 'noLink'
+  >('all');
+  const [page, setPage] = useState(1);
+  const [pageSize, setPageSize] = useState(50);
   const [showImport, setShowImport] = useState(false);
   const [rows, setRows] = useState<CertificateRow[]>([]);
   const [loading, setLoading] = useState(false);
@@ -400,11 +412,26 @@ export function AdminCertificates() {
     }
   };
 
-  const visibleRows = rows.filter(
-    (r) =>
-      r.full_name.toLowerCase().includes(search.toLowerCase()) ||
-      r.class_name.toLowerCase().includes(search.toLowerCase()),
-  );
+  /* Lọc theo ô tìm + trạng thái, rồi chia trang — bảng 400+ dòng không còn phải lướt hết */
+  const visibleRows = rows.filter((r) => {
+    const q = strip(search);
+    const matchSearch =
+      !q || strip(r.full_name).includes(q) || strip(r.class_name).includes(q);
+    const matchStatus =
+      statusFilter === 'all'
+        ? true
+        : statusFilter === 'eligible'
+          ? r.is_eligible
+          : statusFilter === 'locked'
+            ? !r.is_eligible
+            : statusFilter === 'hasLink'
+              ? !!r.certificate_url
+              : !r.certificate_url;
+    return matchSearch && matchStatus;
+  });
+  const pageCount = Math.max(1, Math.ceil(visibleRows.length / pageSize));
+  const safePage = Math.min(page, pageCount);
+  const pageRows = visibleRows.slice((safePage - 1) * pageSize, safePage * pageSize);
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6 lg:px-8">
@@ -432,16 +459,47 @@ export function AdminCertificates() {
         </div>
       )}
 
-      {/* Ô tìm kiếm */}
-      <div className="relative mb-6">
-        <Search className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-        <input
-          type="text"
-          className="input-field pl-11"
-          placeholder="Tìm theo họ tên hoặc lớp..."
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-        />
+      {/* Ô tìm kiếm + lọc trạng thái + cỡ trang */}
+      <div className="mb-6 flex flex-col gap-3 sm:flex-row">
+        <div className="relative flex-1">
+          <Search className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+          <input
+            type="text"
+            className="input-field pl-11"
+            placeholder="Tìm theo họ tên hoặc lớp (gõ không dấu cũng được)..."
+            value={search}
+            onChange={(e) => {
+              setSearch(e.target.value);
+              setPage(1);
+            }}
+          />
+        </div>
+        <select
+          value={statusFilter}
+          onChange={(e) => {
+            setStatusFilter(e.target.value as typeof statusFilter);
+            setPage(1);
+          }}
+          className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm"
+        >
+          <option value="all">Tất cả trạng thái</option>
+          <option value="eligible">Đang đủ điều kiện</option>
+          <option value="locked">Đang bị khóa</option>
+          <option value="hasLink">Đã có link ảnh</option>
+          <option value="noLink">Chưa có link ảnh</option>
+        </select>
+        <select
+          value={pageSize}
+          onChange={(e) => {
+            setPageSize(Number(e.target.value));
+            setPage(1);
+          }}
+          className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm"
+        >
+          <option value={20}>20 / trang</option>
+          <option value={50}>50 / trang</option>
+          <option value={100}>100 / trang</option>
+        </select>
       </div>
 
       {listError && (
@@ -473,9 +531,11 @@ export function AdminCertificates() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {visibleRows.map((row, index) => (
+                {pageRows.map((row, index) => (
                   <tr key={row.id} className="transition-colors hover:bg-slate-50">
-                    <td className="px-5 py-4 text-sm text-slate-400">{index + 1}</td>
+                    <td className="px-5 py-4 text-sm text-slate-400">
+                      {(safePage - 1) * pageSize + index + 1}
+                    </td>
                     <td className="px-5 py-4 text-sm font-medium text-slate-900">{row.full_name}</td>
                     <td className="px-5 py-4 text-sm text-slate-600">{row.class_name}</td>
                     <td className="px-5 py-4">
@@ -558,6 +618,49 @@ export function AdminCertificates() {
               </tbody>
             </table>
           </div>
+          {/* Phân trang */}
+          {visibleRows.length > 0 && (
+            <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 px-5 py-3">
+              <p className="text-xs text-slate-500">
+                Hiển thị {(safePage - 1) * pageSize + 1}–
+                {Math.min(safePage * pageSize, visibleRows.length)} / {visibleRows.length} hồ sơ
+                {visibleRows.length !== rows.length && ` (lọc từ ${rows.length})`}
+              </p>
+              <div className="flex items-center gap-1.5">
+                <button
+                  onClick={() => setPage(1)}
+                  disabled={safePage === 1}
+                  className="rounded-lg px-2.5 py-1.5 text-xs font-medium ring-1 ring-slate-200 disabled:opacity-40"
+                >
+                  Đầu
+                </button>
+                <button
+                  onClick={() => setPage(safePage - 1)}
+                  disabled={safePage === 1}
+                  className="rounded-lg px-2.5 py-1.5 text-xs font-medium ring-1 ring-slate-200 disabled:opacity-40"
+                >
+                  Trước
+                </button>
+                <span className="px-2 text-xs font-medium text-slate-700">
+                  Trang {safePage} / {pageCount}
+                </span>
+                <button
+                  onClick={() => setPage(safePage + 1)}
+                  disabled={safePage === pageCount}
+                  className="rounded-lg px-2.5 py-1.5 text-xs font-medium ring-1 ring-slate-200 disabled:opacity-40"
+                >
+                  Sau
+                </button>
+                <button
+                  onClick={() => setPage(pageCount)}
+                  disabled={safePage === pageCount}
+                  className="rounded-lg px-2.5 py-1.5 text-xs font-medium ring-1 ring-slate-200 disabled:opacity-40"
+                >
+                  Cuối
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       )}
 
