@@ -114,12 +114,12 @@ export function Home() {
           <div className="mb-10 flex flex-col items-center gap-4">
             <div className="flex items-center gap-3">
               <span className="h-px w-10 bg-gradient-to-r from-transparent to-white/40 sm:w-16" />
-              <p className="text-[11px] font-semibold uppercase tracking-[0.3em] text-white/60">
+              <p className="text-[11px] font-bold uppercase tracking-[0.3em] text-white sm:text-xs">
                 Đơn vị tổ chức
               </p>
               <span className="h-px w-10 bg-gradient-to-l from-transparent to-white/40 sm:w-16" />
             </div>
-            <div className="flex flex-wrap items-center justify-center gap-2 sm:gap-3">
+            <div className="flex flex-wrap items-center justify-center gap-6 sm:gap-8">
               {ORG_LOGOS.map((logo) => (
                 <span
                   key={logo.src}
@@ -130,7 +130,7 @@ export function Home() {
                     src={logo.src}
                     alt={logo.alt}
                     loading="lazy"
-                    className="max-h-full max-w-full object-contain drop-shadow-[0_2px_6px_rgba(0,0,0,0.35)]"
+                    className="max-h-full max-w-full object-contain"
                   />
                 </span>
               ))}
