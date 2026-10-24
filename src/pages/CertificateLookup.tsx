@@ -477,8 +477,6 @@ export function CertificateLookup() {
               required
               autoFocus
               className="input-field"
-              // ✏️ Sửa ví dụ gợi ý tại đây
-              placeholder="Nguyễn Văn A"
               value={form.fullName}
               onChange={(e) => {
                 setForm({ ...form, fullName: e.target.value });
@@ -505,7 +503,6 @@ export function CertificateLookup() {
               }}
               autoComplete="off"
             />
-            <p className="text-xs text-slate-400">Gõ họ (ví dụ: Nguyễn) để xem gợi ý tên VĐV.</p>
             {nameSuggestOpen && nameSuggestItems.length > 0 && (
               <ul className="absolute left-0 right-0 top-full z-20 mt-1 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-lg">
                 {nameSuggestItems.map((item, i) => (
@@ -542,8 +539,6 @@ export function CertificateLookup() {
               id="className"
               type="text"
               className="input-field"
-              // ✏️ Sửa ví dụ gợi ý tại đây
-              placeholder="Quản lý tài nguyên và môi trường K71A"
               value={form.className}
               onChange={(e) => {
                 setForm({ ...form, className: e.target.value });
@@ -570,7 +565,6 @@ export function CertificateLookup() {
               }}
               autoComplete="off"
             />
-            <p className="text-xs text-slate-400">Gõ vài chữ cái đầu để xem gợi ý lớp.</p>
             {classSuggestOpen && classSuggestItems.length > 0 && (
               <ul className="absolute left-0 right-0 top-full z-20 mt-1 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-lg">
                 {classSuggestItems.map((cls, i) => (
