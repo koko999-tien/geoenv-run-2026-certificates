@@ -6,6 +6,8 @@ import { AdminLayout } from './components/AdminLayout';
 import { Home } from './pages/Home';
 import { CertificateLookup } from './pages/CertificateLookup';
 import { Gallery } from './pages/Gallery';
+import { Feedback } from './pages/Feedback';
+import { AdminFeedback } from './pages/AdminFeedback';
 import { AdminLogin } from './pages/AdminLogin';
 import { AdminDashboard } from './pages/AdminDashboard';
 import { AdminCertificates } from './pages/AdminCertificates';
@@ -45,6 +47,7 @@ const App = () => {
           <Route path="/" element={<Home />} />
           <Route path="/tra-cuu" element={<CertificateLookup />} />
           <Route path="/thu-vien-anh" element={<Gallery />} />
+          <Route path="/gop-y" element={<Feedback />} />
         </Route>
 
         <Route path="/quan-tri/dang-nhap" element={<AdminLogin onLogin={handleLogin} />} />
@@ -59,6 +62,7 @@ const App = () => {
           <Route path="/quan-tri" element={<AdminDashboard />} />
           <Route path="/quan-tri/chung-nhan" element={<AdminCertificates />} />
           <Route path="/quan-tri/anh" element={<AdminGallery />} />
+          <Route path="/quan-tri/phan-anh" element={<AdminFeedback />} />
         </Route>
 
         <Route path="*" element={<Navigate to="/" replace />} />

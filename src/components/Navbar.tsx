@@ -6,6 +6,7 @@ import { Menu, X } from 'lucide-react';
 const NAV_LINKS = [
   { to: '/tra-cuu', label: 'Tra cứu giấy chứng nhận' },
   { to: '/thu-vien-anh', label: 'Thư viện ảnh' },
+  { to: '/gop-y', label: 'Góp ý & phản ánh' },
   { to: '/quan-tri', label: 'Quản trị' },
 ];
 

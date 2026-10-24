@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { NavLink, Outlet, Link } from 'react-router-dom';
-import { LayoutDashboard, FileText, Image as ImageIcon, LogOut, Menu, X, Globe } from 'lucide-react';
+import { LayoutDashboard, FileText, Image as ImageIcon, LogOut, Menu, X, Globe, Mail } from 'lucide-react';
 import { cn } from '../lib/utils';
 
 /* ✏️ Mục điều hướng cột trái — 1 dòng 1 trang quản trị */
@@ -8,6 +8,7 @@ const NAV_ITEMS = [
   { to: '/quan-tri', label: 'Tổng quan', icon: LayoutDashboard, end: true },
   { to: '/quan-tri/chung-nhan', label: 'Chứng nhận', icon: FileText, end: false },
   { to: '/quan-tri/anh', label: 'Thư viện ảnh', icon: ImageIcon, end: false },
+  { to: '/quan-tri/phan-anh', label: 'Góp ý & phản ánh', icon: Mail, end: false },
 ];
 
 export function AdminLayout({ onLogout }: { onLogout: () => void }) {

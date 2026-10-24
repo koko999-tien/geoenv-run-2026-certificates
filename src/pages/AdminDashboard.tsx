@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Users, Image as ImageIcon, ShieldCheck, Loader2, ListChecks, Lock } from 'lucide-react';
+import { Users, Image as ImageIcon, ShieldCheck, Loader2, ListChecks, Lock, Mail } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { isPublicLocked } from '../lib/siteLock';
@@ -9,6 +9,7 @@ interface Stats {
   eligibleCount: number;
   totalAlbums: number;
   totalPhotos: number;
+  unreadFeedback: number | null;
   loading: boolean;
 }
 
@@ -18,6 +19,7 @@ export function AdminDashboard() {
     eligibleCount: 0,
     totalAlbums: 0,
     totalPhotos: 0,
+    unreadFeedback: null,
     loading: true,
   });
   /* Trạng thái khóa khu vực công khai: null = chưa đọc được (bảng cài đặt chưa có) */
@@ -30,22 +32,34 @@ export function AdminDashboard() {
   useEffect(() => {
     const loadStats = async () => {
       try {
-        const [totalRes, eligibleRes, albumsRes, photosRes, locked] = await Promise.all([
-          supabase.from('certificate_records').select('*', { count: 'exact', head: true }),
-          supabase
-            .from('certificate_records')
-            .select('*', { count: 'exact', head: true })
-            .eq('is_eligible', true),
-          supabase.from('albums').select('*', { count: 'exact', head: true }),
-          supabase.from('photos').select('*', { count: 'exact', head: true }),
-          isPublicLocked(),
-        ]);
+        const [totalRes, eligibleRes, albumsRes, photosRes, locked, unreadFeedback] =
+          await Promise.all([
+            supabase.from('certificate_records').select('*', { count: 'exact', head: true }),
+            supabase
+              .from('certificate_records')
+              .select('*', { count: 'exact', head: true })
+              .eq('is_eligible', true),
+            supabase.from('albums').select('*', { count: 'exact', head: true }),
+            supabase.from('photos').select('*', { count: 'exact', head: true }),
+            isPublicLocked(),
+            /* Số phản ánh chưa đọc — nuốt lỗi riêng để bảng hòm thư chưa có cũng
+               không làm mất số liệu các bảng khác */
+            supabase
+              .from('feedback_reports')
+              .select('*', { count: 'exact', head: true })
+              .eq('is_read', false)
+              .then(
+                (res) => res.count ?? null,
+                () => null,
+              ),
+          ]);
         setStats((s) => ({
           ...s,
           totalCertificates: totalRes.count ?? 0,
           eligibleCount: eligibleRes.count ?? 0,
           totalAlbums: albumsRes.count ?? 0,
           totalPhotos: photosRes.count ?? 0,
+          unreadFeedback,
           loading: false,
         }));
         setSiteLocked(locked);
@@ -177,6 +191,21 @@ export function AdminDashboard() {
             { to: '/quan-tri/anh', label: 'Vào thư viện ảnh', icon: ImageIcon },
           ]}
         />
+        <ActionCard
+          title="Hòm thư góp ý & phản ánh"
+          icon={<Mail className="h-5 w-5 text-amber-600" />}
+          items={[
+            {
+              to: '/quan-tri/phan-anh',
+              label: 'Xem góp ý & phản ánh',
+              icon: Mail,
+              badge:
+                stats.unreadFeedback && stats.unreadFeedback > 0
+                  ? `${stats.unreadFeedback} mới`
+                  : null,
+            },
+          ]}
+        />
       </div>
     </div>
   );
@@ -189,7 +218,12 @@ function ActionCard({
 }: {
   title: string;
   icon: React.ReactNode;
-  items: { to: string; label: string; icon: React.ComponentType<{ className?: string }> }[];
+  items: {
+    to: string;
+    label: string;
+    icon: React.ComponentType<{ className?: string }>;
+    badge?: string | null;
+  }[];
 }) {
   return (
     <div className="card p-6 sm:p-7">
@@ -206,6 +240,11 @@ function ActionCard({
           >
             <item.icon className="h-4 w-4 shrink-0 text-geoenv-600" />
             {item.label}
+            {item.badge && (
+              <span className="ml-auto rounded-full bg-amber-400 px-2.5 py-0.5 text-xs font-bold text-white">
+                {item.badge}
+              </span>
+            )}
           </Link>
         ))}
       </div>
