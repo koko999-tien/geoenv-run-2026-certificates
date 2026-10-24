@@ -3,6 +3,8 @@ import { Link } from 'react-router-dom';
 import { Search, Image as ImageIcon, Download, ArrowLeft, ArrowRight, X, Camera } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { driveDownloadUrl } from '../lib/drive';
+import { usePublicLock } from '../lib/siteLock';
+import { PublicLockNotice } from '../components/PublicLockNotice';
 import type { Album, Photo } from '../types/index';
 
 /* Ảnh sự kiện lấy từ bảng albums/photos trong Supabase (quản trị viên thêm bằng link Drive). */
@@ -15,9 +17,19 @@ export function Gallery() {
   const [albums, setAlbums] = useState<Album[]>([]);
   const [photoRows, setPhotoRows] = useState<Photo[]>([]);
   const [loading, setLoading] = useState(true);
+  /* Cổng khóa khu vực công khai: khách thấy thông báo tạm khóa, admin đã đăng nhập vẫn dùng */
+  const lock = usePublicLock();
 
-  /* Tải album + ảnh từ Supabase; bảng chưa có hoặc lỗi thì hiện trạng thái trống, không vỡ trang */
+  /* Tải album + ảnh từ Supabase; bảng chưa có hoặc lỗi thì hiện trạng thái trống, không vỡ trang.
+     Đang khóa với khách thì khỏi tải dữ liệu. */
   useEffect(() => {
+    if (!lock.checked) return;
+    if (lock.locked && !lock.isAdmin) {
+      setAlbums([]);
+      setPhotoRows([]);
+      setLoading(false);
+      return;
+    }
     const load = async () => {
       try {
         const [aRes, pRes] = await Promise.all([
@@ -47,7 +59,7 @@ export function Gallery() {
       }
     };
     void load();
-  }, []);
+  }, [lock]);
 
   const photos = photoRows.filter(
     (p) =>
@@ -96,6 +108,36 @@ export function Gallery() {
 
   const currentAlbum = albums.find((a) => a.id === selectedAlbum);
 
+  /* Đang kiểm tra cờ khóa */
+  if (!lock.checked) {
+    return (
+      <div className="mx-auto max-w-6xl px-4 py-10 sm:py-14">
+        <p className="text-center text-sm text-slate-500">Đang tải...</p>
+      </div>
+    );
+  }
+
+  /* Đang khóa và không phải admin: chỉ hiện thông báo tạm khóa */
+  if (lock.locked && !lock.isAdmin) {
+    return (
+      <div className="mx-auto max-w-6xl px-4 py-10 sm:py-14">
+        <Link
+          to="/"
+          className="inline-flex items-center gap-1.5 text-sm font-medium text-slate-500 transition-colors hover:text-geoenv-600"
+        >
+          <span aria-hidden>←</span> Về trang chủ
+        </Link>
+        <div className="mt-4 text-center">
+          <span className="inline-flex items-center gap-2 rounded-full bg-emerald-50 px-4 py-1.5 text-xs font-semibold tracking-wide text-emerald-700 ring-1 ring-emerald-100 sm:text-sm">
+            📸 Album ảnh
+          </span>
+          <h1 className="mt-4 text-2xl font-bold text-slate-900 sm:text-3xl">Thư viện ảnh sự kiện</h1>
+        </div>
+        <PublicLockNotice />
+      </div>
+    );
+  }
+
   return (
     <div className="mx-auto max-w-6xl px-4 py-10 sm:py-14">
       {/* Phần đầu trang — ✏️ sửa tiêu đề/mô tả tại đây */}
@@ -105,6 +147,12 @@ export function Gallery() {
       >
         <span aria-hidden>←</span> Về trang chủ
       </Link>
+
+      {lock.locked && lock.isAdmin && (
+        <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-center text-sm text-amber-800">
+          Bạn đang xem với quyền quản trị — trang đang khóa với khách.
+        </div>
+      )}
 
       <div className="mt-4 text-center">
         <span className="inline-flex items-center gap-2 rounded-full bg-emerald-50 px-4 py-1.5 text-xs font-semibold tracking-wide text-emerald-700 ring-1 ring-emerald-100 sm:text-sm">

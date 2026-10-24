@@ -4,6 +4,8 @@ import { Download, AlertCircle, CheckCircle, Search, Info, Lightbulb, Lock } fro
 import { Button } from '../components/Button';
 import { cn } from '../lib/utils';
 import { supabase } from '../lib/supabase';
+import { usePublicLock } from '../lib/siteLock';
+import { PublicLockNotice } from '../components/PublicLockNotice';
 import { OFFICIAL_MAJORS } from '../data/majors';
 
 interface SearchResult {
@@ -152,6 +154,8 @@ export function CertificateLookup() {
   const [nameSuggestOpen, setNameSuggestOpen] = useState(false);
   const [nameSuggestItems, setNameSuggestItems] = useState<Candidate[]>([]);
   const [nameSuggestActive, setNameSuggestActive] = useState(0);
+  /* Cổng khóa khu vực công khai: khách thấy thông báo tạm khóa, admin đã đăng nhập vẫn dùng */
+  const lock = usePublicLock();
 
   /* Tải danh sách (dùng chung bộ nhớ đệm với nút tìm) để gợi ý không cần bấm tìm */
   const ensureRows = async (): Promise<Record<string, any>[]> => {
@@ -460,6 +464,38 @@ export function CertificateLookup() {
     'Vẫn không thấy? Liên hệ BTC qua thông tin ở cuối trang nhé.',
   ];
 
+  /* Đang kiểm tra cờ khóa */
+  if (!lock.checked) {
+    return (
+      <div className="mx-auto max-w-xl px-4 py-10 sm:py-14">
+        <p className="text-center text-sm text-slate-500">Đang tải...</p>
+      </div>
+    );
+  }
+
+  /* Đang khóa và không phải admin: chỉ hiện thông báo tạm khóa */
+  if (lock.locked && !lock.isAdmin) {
+    return (
+      <div className="mx-auto max-w-xl px-4 py-10 sm:py-14">
+        <Link
+          to="/"
+          className="inline-flex items-center gap-1.5 text-sm font-medium text-slate-500 transition-colors hover:text-geoenv-600"
+        >
+          <span aria-hidden>←</span> Về trang chủ
+        </Link>
+        <div className="mt-4 text-center">
+          <span className="inline-flex items-center gap-2 rounded-full bg-geoenv-50 px-4 py-1.5 text-xs font-semibold tracking-wide text-geoenv-700 ring-1 ring-geoenv-100 sm:text-sm">
+            🏅 Giấy chứng nhận
+          </span>
+          <h1 className="mt-4 text-3xl font-bold text-slate-900 sm:text-4xl">
+            Tra cứu giấy chứng nhận
+          </h1>
+        </div>
+        <PublicLockNotice />
+      </div>
+    );
+  }
+
   return (
     <div className="mx-auto max-w-xl px-4 py-10 sm:py-14">
       {/* Phần đầu — ✏️ sửa tiêu đề/mô tả tại đây */}
@@ -469,6 +505,12 @@ export function CertificateLookup() {
       >
         <span aria-hidden>←</span> Về trang chủ
       </Link>
+
+      {lock.locked && lock.isAdmin && (
+        <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-center text-sm text-amber-800">
+          Bạn đang xem với quyền quản trị — trang đang khóa với khách.
+        </div>
+      )}
 
       <div className="mt-4 text-center">
         <span className="inline-flex items-center gap-2 rounded-full bg-geoenv-50 px-4 py-1.5 text-xs font-semibold tracking-wide text-geoenv-700 ring-1 ring-geoenv-100 sm:text-sm">
