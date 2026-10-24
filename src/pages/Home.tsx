@@ -27,7 +27,7 @@ const EVENT = {
   name: 'GEOENV RUN 2026',
   tagline: 'Bước chân Địa chất – Môi trường',
   intro:
-    'Giải chạy tiếp sức Ekiden 10KM do hai Khoa: Khoa học & Kỹ thuật Địa chất phối hợp Khoa Môi trường tổ chức. Sự kiện chào đón tân sinh viên K71 và hướng tới kỷ niệm 60 năm thành lập Trường ĐH Mỏ – Địa chất.',
+    'Giải chạy tiếp sức Ekiden 10KM do hai Khoa: Khoa học & Kỹ thuật Địa chất phối hợp Khoa Môi trường tổ chức. Sự kiện chào đón tân sinh viên K71 và hướng tới kỷ niệm 60 năm thành lập Trường ĐH Mỏ – Địa chất.',
   dateText: 'Chủ nhật, 25/10/2026',
   placeText: 'Trường Đại học Mỏ – Địa chất',
   placeDetail:
@@ -163,7 +163,7 @@ export function Home() {
           </div>
 
           {/* ✏️ Đoạn giới thiệu (sửa trong EVENT ở đầu file) */}
-          <p className="mx-auto mt-5 max-w-2xl text-pretty text-sm leading-relaxed text-white/85 sm:text-base lg:max-w-3xl">
+          <p className="mx-auto mt-5 max-w-2xl text-balance text-sm leading-relaxed text-white/85 sm:text-base lg:max-w-3xl">
             {EVENT.intro}
           </p>
 
