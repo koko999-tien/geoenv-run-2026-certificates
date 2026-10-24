@@ -113,27 +113,23 @@ export function Home() {
           {/* 🏛️ Hàng đơn vị tổ chức — chuẩn "hàng tài trợ":
                  nhãn chữ có đường kẻ mảnh hai bên + 5 logo sticker trắng đồng khổ nổi trên nền tối */}
           <div className="mb-6 flex flex-col items-center md:mb-8">
-            <div className="flex items-center justify-center gap-3">
-              <span className="h-px w-10 bg-white/30 md:w-16" />
-              <p className="text-xs font-semibold uppercase tracking-widest text-white/90 md:text-sm">
-                Đơn vị tổ chức
-              </p>
-              <span className="h-px w-10 bg-white/30 md:w-16" />
-            </div>
-            <div className="mt-3 flex items-center justify-center gap-3 md:gap-5">
+            <p className="mb-2 flex items-center justify-center gap-3 text-[11px] font-bold uppercase tracking-[0.2em] text-white/90 md:mb-3 md:text-xs">
+              <span className="h-[1px] w-8 bg-white/30 md:w-12" />
+              Đơn vị tổ chức
+              <span className="h-[1px] w-8 bg-white/30 md:w-12" />
+            </p>
+            {/* Một dải capsule trắng duy nhất chứa cả 5 logo gốc — nền trắng của dải
+                tự làm nền sạch cho mọi logo, giữ nguyên form dáng từng biểu trưng */}
+            <div className="inline-flex max-w-full items-center justify-center gap-3.5 overflow-hidden rounded-full border border-white/60 bg-white/95 px-5 py-2 shadow-lg backdrop-blur-md md:gap-5 md:px-7 md:py-2.5">
               {ORG_LOGOS.map((logo) => (
-                <div
+                <img
                   key={logo.src}
+                  src={logo.src}
+                  alt={logo.alt}
                   title={logo.alt}
-                  className="flex h-11 w-11 items-center justify-center rounded-full border border-white/40 bg-white p-1.5 shadow-lg backdrop-blur-sm transition-transform hover:scale-105 md:h-13 md:w-13 md:p-2"
-                >
-                  <img
-                    src={logo.src}
-                    alt={logo.alt}
-                    loading="lazy"
-                    className="h-full w-full object-contain"
-                  />
-                </div>
+                  loading="lazy"
+                  className="h-7 w-auto object-contain md:h-9"
+                />
               ))}
             </div>
           </div>
@@ -259,48 +255,6 @@ export function Home() {
               </p>
             </div>
           ))}
-        </div>
-      </section>
-
-      {/* ================= NHÌN LẠI MÙA 1 — ảnh thật, dẫn vào thư viện ================= */}
-      <section className="py-12 sm:py-16">
-        <div className="mx-auto max-w-5xl px-4 sm:px-6">
-          <div className="flex flex-wrap items-end justify-between gap-3">
-            <div>
-              <h2 className="text-2xl font-bold text-slate-900 sm:text-3xl">
-                Nhìn lại GEOENV RUN mùa 1
-              </h2>
-              <p className="mt-2 max-w-xl text-sm text-slate-600 sm:text-base">
-                Những khoảnh khắc đáng nhớ của mùa giải 2025 — hẹn gặp lại ở mùa 2 với quy mô lớn
-                hơn.
-              </p>
-            </div>
-            <Link
-              to="/thu-vien-anh"
-              className="group inline-flex items-center gap-1.5 text-sm font-semibold text-geoenv-700 hover:text-geoenv-800"
-            >
-              <Camera className="h-4 w-4" />
-              Xem thư viện ảnh
-              <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
-            </Link>
-          </div>
-
-          <div className="mt-7 grid grid-cols-1 gap-4 sm:grid-cols-3">
-            {['/s1-1.jpg', '/s1-2.jpg', '/s1-3.jpg'].map((src, i) => (
-              <Link
-                key={src}
-                to="/thu-vien-anh"
-                className="group block overflow-hidden rounded-2xl shadow-sm ring-1 ring-slate-900/5"
-              >
-                <img
-                  src={src}
-                  alt={`GEOENV RUN mùa 1 — ảnh ${i + 1}`}
-                  loading="lazy"
-                  className="aspect-[3/2] w-full object-cover transition-transform duration-300 group-hover:scale-105"
-                />
-              </Link>
-            ))}
-          </div>
         </div>
       </section>
 
