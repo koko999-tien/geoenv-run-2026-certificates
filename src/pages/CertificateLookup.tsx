@@ -519,11 +519,7 @@ export function CertificateLookup() {
         <h1 className="mt-4 text-3xl font-bold text-slate-900 sm:text-4xl">
           Tra cứu giấy chứng nhận
         </h1>
-        <p className="mx-auto mt-2 max-w-md text-sm leading-relaxed text-slate-600">
-          Nhập <strong className="text-slate-900">họ tên</strong> để tìm và tải giấy chứng nhận
-          tham gia GEOENV RUN 2026. Nên gõ tên lớp đầy đủ, ví dụ: Quản lý tài nguyên và môi
-          trường K71A. Bỏ trống ô lớp cũng được.
-        </p>
+
       </div>
 
       {/* Form tra cứu — thẻ trắng chuẩn học thuật */}

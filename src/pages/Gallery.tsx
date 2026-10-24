@@ -159,9 +159,7 @@ export function Gallery() {
           📸 Album ảnh
         </span>
         <h1 className="mt-4 text-2xl font-bold text-slate-900 sm:text-3xl">Thư viện ảnh sự kiện</h1>
-        <p className="mx-auto mt-2 max-w-md text-sm leading-relaxed text-slate-600">
-          Xem ảnh GEOENV RUN 2026, mở to từng tấm, điều khiển bằng bàn phím và tải về thiết bị.
-        </p>
+
       </div>
 
       {/* Thanh công cụ: tìm kiếm + chọn album */}
