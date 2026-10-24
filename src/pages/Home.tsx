@@ -287,7 +287,7 @@ export function Home() {
             {infoItems.map((item) => (
               <div
                 key={item.label}
-                className="card flex items-start gap-3.5 p-5 transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md sm:flex-col sm:items-center sm:text-center"
+                className="card flex flex-col items-center p-5 text-center transition-all duration-200 hover:-translate-y-0.5 hover:shadow-md"
               >
                 <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-geoenv-50 ring-1 ring-geoenv-100">
                   <item.icon className="h-5 w-5 text-geoenv-600" />
@@ -303,12 +303,10 @@ export function Home() {
               </div>
             ))}
           </div>
-          <p className="mx-auto mt-5 flex max-w-2xl items-start justify-center gap-1.5 text-center text-sm text-slate-500">
-            <MapPin className="mt-0.5 h-4 w-4 shrink-0 text-geoenv-500" />
-            <span>
-              <span className="font-semibold text-slate-700">Cung đường thi đấu:</span>{' '}
-              {EVENT.placeDetail}
-            </span>
+          <p className="mx-auto mt-5 max-w-2xl text-center text-sm leading-relaxed text-slate-500">
+            <MapPin className="mr-1 inline h-4 w-4 align-[-2px] text-geoenv-500" />
+            <span className="font-semibold text-slate-700">Cung đường thi đấu:</span>{' '}
+            {EVENT.placeDetail}
           </p>
         </div>
       </section>
@@ -319,7 +317,7 @@ export function Home() {
           <h2 className="text-center text-xs font-bold uppercase tracking-[0.2em] text-geoenv-600">
             Giới thiệu giải chạy
           </h2>
-          <p className="mx-auto mt-5 max-w-3xl text-center text-sm leading-relaxed text-slate-600 sm:text-base">
+          <p className="mx-auto mt-5 max-w-2xl text-center text-sm leading-relaxed text-slate-600 sm:text-base">
             GEOENV RUN Season 2 – “Bước chân Địa chất &amp; Môi trường” là sân chơi thể thao
             lành mạnh nhằm thúc đẩy phong trào rèn luyện sức khỏe, tăng cường giao lưu, kết
             nối giữa cán bộ, giảng viên và sinh viên hai Khoa Địa chất – Môi trường nói
