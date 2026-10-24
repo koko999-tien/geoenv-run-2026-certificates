@@ -15,6 +15,8 @@ export function Feedback() {
   const [category, setCategory] = useState(CATEGORIES[0]);
   const [name, setName] = useState('');
   const [team, setTeam] = useState('');
+  const [className, setClassName] = useState('');
+  const [bibNumber, setBibNumber] = useState('');
   const [contact, setContact] = useState('');
   const [content, setContent] = useState('');
   const [sending, setSending] = useState(false);
@@ -33,6 +35,8 @@ export function Feedback() {
       category,
       name: name.trim() || null,
       team: team.trim() || null,
+      class_name: className.trim() || null,
+      bib_number: bibNumber.trim() || null,
       contact: contact.trim() || null,
       content: content.trim(),
     });
@@ -50,6 +54,8 @@ export function Feedback() {
     setCategory(CATEGORIES[0]);
     setName('');
     setTeam('');
+    setClassName('');
+    setBibNumber('');
     setContact('');
     setContent('');
     setSent(false);
@@ -112,28 +118,54 @@ export function Feedback() {
             </select>
           </div>
 
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <div>
-              <label htmlFor="fb-name" className="mb-1.5 block text-sm font-semibold text-slate-900">
-                Họ tên <span className="font-normal text-slate-500">(không bắt buộc)</span>
-              </label>
-              <input
-                id="fb-name"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                placeholder="Để trống nếu muốn ẩn danh"
-                className="input-field"
-              />
-            </div>
+          <div>
+            <label htmlFor="fb-name" className="mb-1.5 block text-sm font-semibold text-slate-900">
+              Họ tên <span className="font-normal text-slate-500">(không bắt buộc)</span>
+            </label>
+            <input
+              id="fb-name"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              placeholder="Để trống nếu muốn ẩn danh"
+              className="input-field"
+            />
+          </div>
+
+          {/* Thông tin người gửi — cả 3 đều không bắt buộc */}
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
             <div>
               <label htmlFor="fb-team" className="mb-1.5 block text-sm font-semibold text-slate-900">
-                Đội / Lớp <span className="font-normal text-slate-500">(không bắt buộc)</span>
+                Đội <span className="font-normal text-slate-500">(không bắt buộc)</span>
               </label>
               <input
                 id="fb-team"
                 value={team}
                 onChange={(e) => setTeam(e.target.value)}
-                placeholder="Ví dụ: Đội Rùa Bò, lớp QLTNMT K71A"
+                placeholder="Ví dụ: Rùa Bò"
+                className="input-field"
+              />
+            </div>
+            <div>
+              <label htmlFor="fb-class" className="mb-1.5 block text-sm font-semibold text-slate-900">
+                Lớp <span className="font-normal text-slate-500">(không bắt buộc)</span>
+              </label>
+              <input
+                id="fb-class"
+                value={className}
+                onChange={(e) => setClassName(e.target.value)}
+                placeholder="Ví dụ: QLTNMT K71A"
+                className="input-field"
+              />
+            </div>
+            <div>
+              <label htmlFor="fb-bib" className="mb-1.5 block text-sm font-semibold text-slate-900">
+                Số BIB của bạn <span className="font-normal text-slate-500">(không bắt buộc)</span>
+              </label>
+              <input
+                id="fb-bib"
+                value={bibNumber}
+                onChange={(e) => setBibNumber(e.target.value)}
+                placeholder="Ví dụ: 42-03"
                 className="input-field"
               />
             </div>
@@ -149,7 +181,7 @@ export function Feedback() {
               onChange={(e) => setContent(e.target.value)}
               maxLength={1000}
               rows={5}
-              placeholder="Mô tả rõ sự việc: xảy ra ở đâu, lúc nào, liên quan tới ai/đội nào (nếu biết)..."
+              placeholder="Mô tả rõ sự việc: xảy ra ở đâu, lúc nào, số BIB / đội của người liên quan (nếu biết)..."
               className="input-field resize-y"
             />
             <p className="mt-1 text-right text-xs text-slate-400">{content.length}/1000 ký tự</p>
