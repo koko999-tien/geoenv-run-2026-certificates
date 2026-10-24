@@ -13,6 +13,18 @@ import { AdminDashboard } from './pages/AdminDashboard';
 import { AdminCertificates } from './pages/AdminCertificates';
 import { AdminGallery } from './pages/AdminGallery';
 
+/* Web này là trang đơn (không tải lại trang khi chuyển mục) nên trình duyệt giữ
+   nguyên vị trí cuộn sang trang mới — đang ở cuối trang chủ mà bấm sang trang
+   ngắn hơn là bị dồn xuống cuối trang đó. Component này đưa về đầu trang mỗi
+   khi đổi đường dẫn. Cuộn tức thì (không hiệu ứng) để không thấy cảnh kéo lên. */
+function ScrollToTop() {
+  const { pathname } = useLocation();
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, [pathname]);
+  return null;
+}
+
 function ProtectedRoute({ children, isAuthenticated }: { children: React.ReactNode; isAuthenticated: boolean }) {
   const location = useLocation();
   if (!isAuthenticated) {
@@ -42,6 +54,7 @@ const App = () => {
 
   return (
     <BrowserRouter>
+      <ScrollToTop />
       <Routes>
         <Route element={<Layout />}>
           <Route path="/" element={<Home />} />
