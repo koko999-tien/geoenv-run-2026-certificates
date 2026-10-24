@@ -44,7 +44,7 @@ export function Navbar() {
 
           {/* Nút ☰ điện thoại */}
           <button
-            className="rounded-lg p-2 text-slate-600 transition-colors hover:bg-slate-100 hover:text-slate-900 md:hidden"
+            className="rounded-lg p-2.5 text-slate-600 transition-colors hover:bg-slate-100 hover:text-slate-900 md:hidden"
             onClick={() => setOpen(!open)}
             aria-label={open ? 'Đóng menu' : 'Mở menu'}
             aria-expanded={open}

@@ -263,7 +263,7 @@ export function Gallery() {
         >
           <button
             onClick={(e) => { e.stopPropagation(); closeViewer(); }}
-            className="absolute left-3 top-3 z-10 rounded-full bg-white/10 p-2.5 text-white transition-colors hover:bg-white/25 sm:left-5 sm:top-5"
+            className="absolute left-3 top-3 z-10 rounded-full bg-white/10 p-3 text-white transition-colors hover:bg-white/25 sm:left-5 sm:top-5"
             aria-label="Đóng trình xem ảnh"
           >
             <X className="h-5 w-5 sm:h-6 sm:w-6" />
@@ -279,14 +279,14 @@ export function Gallery() {
           >
             <button
               onClick={prevPhoto}
-              className="absolute left-0 top-1/2 z-20 -translate-y-1/2 translate-x-2 rounded-full bg-white/10 p-2.5 text-white transition-all hover:bg-white/25 hover:translate-x-0 sm:p-3"
+              className="absolute left-0 top-1/2 z-20 -translate-y-1/2 translate-x-2 rounded-full bg-white/10 p-3 text-white transition-all hover:bg-white/25 hover:translate-x-0"
               aria-label="Ảnh trước"
             >
               <ArrowLeft className="h-4 w-4 sm:h-5 sm:w-5" />
             </button>
             <button
               onClick={nextPhoto}
-              className="absolute right-0 top-1/2 z-20 -translate-y-1/2 -translate-x-2 rounded-full bg-white/10 p-2.5 text-white transition-all hover:bg-white/25 hover:translate-x-0 sm:p-3"
+              className="absolute right-0 top-1/2 z-20 -translate-y-1/2 -translate-x-2 rounded-full bg-white/10 p-3 text-white transition-all hover:bg-white/25 hover:translate-x-0"
               aria-label="Ảnh sau"
             >
               <ArrowRight className="h-4 w-4 sm:h-5 sm:w-5" />
@@ -312,7 +312,7 @@ export function Gallery() {
             <div className="mt-4 flex items-center gap-3">
               <button
                 onClick={() => downloadPhoto(photos[currentIndex])}
-                className="inline-flex items-center gap-2 rounded-xl bg-white px-4 py-2.5 text-sm font-semibold text-slate-900 transition-colors hover:bg-slate-100"
+                className="inline-flex items-center gap-2 rounded-xl bg-white px-4 py-3 text-sm font-semibold text-slate-900 transition-colors hover:bg-slate-100"
               >
                 <Download className="h-4 w-4" /> Tải ảnh
               </button>

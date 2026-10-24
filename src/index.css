@@ -85,7 +85,7 @@
 
   /* Ô nhập liệu — nền trắng viền xám */
   .input-field {
-    @apply w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-900
+    @apply w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-base text-slate-900
       placeholder-slate-400 shadow-sm transition-all duration-200
       focus:border-geoenv-500 focus:outline-none focus:ring-2 focus:ring-geoenv-500/30;
   }

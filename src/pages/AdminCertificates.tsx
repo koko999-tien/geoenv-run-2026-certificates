@@ -785,7 +785,7 @@ export function AdminCertificates() {
                 <select
                   value={nameCol}
                   onChange={(e) => setNameCol(Number(e.target.value))}
-                  className="mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm"
+                  className="mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-base"
                 >
                   {columns.map((c, i) => (
                     <option key={i} value={i}>
@@ -799,7 +799,7 @@ export function AdminCertificates() {
                 <select
                   value={classCol}
                   onChange={(e) => setClassCol(Number(e.target.value))}
-                  className="mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm"
+                  className="mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-base"
                 >
                   {columns.map((c, i) => (
                     <option key={i} value={i}>

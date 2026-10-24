@@ -4,7 +4,7 @@ export function Footer() {
   return (
     <footer className="bg-geoenv-950 text-slate-300">
       <div className="mx-auto max-w-6xl px-4 py-12 sm:px-6 lg:px-8 lg:py-14">
-        <div className="grid grid-cols-1 gap-8 sm:grid-cols-2 md:grid-cols-4">
+        <div className="grid grid-cols-1 gap-8 sm:grid-cols-2 lg:grid-cols-4">
           {/* Logo + giới thiệu */}
           <div>
             <div className="flex items-center gap-2.5">
@@ -53,7 +53,7 @@ export function Footer() {
             <ul className="mt-4 space-y-2 text-sm text-slate-400">
               <li>
                 <span className="block font-medium text-slate-300">Khoa KH&amp;KT Địa chất</span>
-                <span className="whitespace-nowrap">
+                <span>
                   Đ/c Trần Lăng Dũng —{' '}
                   <a href="tel:0348679721" className="text-geoenv-400 transition-colors hover:text-geoenv-300">
                     0348 679 721
@@ -62,7 +62,7 @@ export function Footer() {
               </li>
               <li>
                 <span className="block font-medium text-slate-300">Khoa Môi trường</span>
-                <span className="whitespace-nowrap">
+                <span>
                   Đ/c Đinh Tuấn Vũ —{' '}
                   <a href="tel:0349575674" className="text-geoenv-400 transition-colors hover:text-geoenv-300">
                     0349 575 674
@@ -71,7 +71,7 @@ export function Footer() {
               </li>
               <li>
                 Email:{' '}
-                <a href="mailto:lienchidiachat.humg@gmail.com" className="text-geoenv-400 transition-colors hover:text-geoenv-300">
+                <a href="mailto:lienchidiachat.humg@gmail.com" className="break-all text-geoenv-400 transition-colors hover:text-geoenv-300">
                   lienchidiachat.humg@gmail.com
                 </a>
               </li>
