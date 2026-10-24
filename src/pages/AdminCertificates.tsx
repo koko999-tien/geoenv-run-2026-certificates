@@ -81,36 +81,42 @@ const supaMsg = (e: unknown) =>
   (e as { message?: string } | null)?.message ?? 'Không rõ nguyên nhân';
 
 /* Nhận diện dòng tiêu đề: trả về nhãn cột, các dòng dữ liệu và cột Họ tên/Lớp mặc định.
-   BTC vẫn đổi lại được ở 2 ô chọn cột — vì tiêu đề file thực tế rất đa dạng. */
+   BTC vẫn đổi lại được ở 2 ô chọn cột — vì tiêu đề file thực tế rất đa dạng.
+   QUAN TRỌNG: "Tên đội" không bao giờ được nhận làm cột Họ tên (nó chứa chữ "tên"
+   nên lần trước code nhận nhầm, nhập toàn tên đội vào cột họ tên). */
 function detectColumns(raw: string[][]): {
   columns: string[];
   dataRows: string[][];
   nameCol: number;
   classCol: number;
+  headerFound: boolean;
 } {
+  const finish = (i: number, ni: number, ci: number) => ({
+    columns: raw[i].map((c, idx) => clean(c) || `Cột ${idx + 1}`),
+    dataRows: raw.slice(i + 1),
+    nameCol: ni,
+    classCol: ci,
+    headerFound: true,
+  });
   for (let i = 0; i < raw.length; i++) {
     const cells = raw[i].map((c) => norm(c));
+    /* Lượt 1: khớp chính xác cả 2 cột */
     const ni = cells.findIndex((c) => NAME_HEADERS.includes(c));
     const ci = cells.findIndex((c) => CLASS_HEADERS.includes(c));
-    if (ni >= 0 && ci >= 0) {
-      return {
-        columns: raw[i].map((c, idx) => clean(c) || `Cột ${idx + 1}`),
-        dataRows: raw.slice(i + 1),
-        nameCol: ni,
-        classCol: ci,
-      };
-    }
-    /* Dự phòng: tiêu đề kiểu "Họ tên sinh viên", "Tên lớp"... — nhận theo từ khóa chứa */
-    const ni2 = cells.findIndex((c) => c.includes('tên') && !c.includes('lớp'));
-    const ci2 = cells.findIndex((c, idx) => idx !== ni2 && c.includes('lớp'));
-    if (ni2 >= 0 && ci2 >= 0) {
-      return {
-        columns: raw[i].map((c, idx) => clean(c) || `Cột ${idx + 1}`),
-        dataRows: raw.slice(i + 1),
-        nameCol: ni2,
-        classCol: ci2,
-      };
-    }
+    if (ni >= 0 && ci >= 0) return finish(i, ni, ci);
+    /* Lượt 2: tên khớp chính xác hoặc chứa "họ tên"; lớp khớp chính xác hoặc chứa "lớp"
+       ("Lớp (VD: ...)" rơi vào đây; "Tên đội" bị loại vì không chứa "họ tên") */
+    const ni2 = cells.findIndex((c) => NAME_HEADERS.includes(c) || c.includes('họ tên'));
+    const ci2 = cells.findIndex(
+      (c, idx) => idx !== ni2 && (CLASS_HEADERS.includes(c) || c.includes('lớp')),
+    );
+    if (ni2 >= 0 && ci2 >= 0) return finish(i, ni2, ci2);
+    /* Lượt 3: tên chứa "tên" nhưng KHÔNG phải "tên đội" và không phải cột lớp */
+    const ni3 = cells.findIndex(
+      (c) => c.includes('tên') && !c.includes('đội') && !c.includes('lớp'),
+    );
+    const ci3 = cells.findIndex((c, idx) => idx !== ni3 && c.includes('lớp'));
+    if (ni3 >= 0 && ci3 >= 0) return finish(i, ni3, ci3);
   }
   const width = Math.max(0, ...raw.map((r) => r.length));
   return {
@@ -121,6 +127,7 @@ function detectColumns(raw: string[][]): {
     dataRows: raw,
     nameCol: 0,
     classCol: 1,
+    headerFound: false,
   };
 }
 
@@ -138,6 +145,7 @@ export function AdminCertificates() {
   const [nameCol, setNameCol] = useState(0);
   const [classCol, setClassCol] = useState(1);
   const [parsed, setParsed] = useState<ParsedRow[]>([]);
+  const [skipped, setSkipped] = useState<{ fullName: string; className: string }[]>([]);
   const [importing, setImporting] = useState(false);
   const [importResult, setImportResult] = useState('');
   const [importError, setImportError] = useState('');
@@ -153,6 +161,12 @@ export function AdminCertificates() {
       const extracted = dataRows
         .map((r) => ({ fullName: clean(r[nameCol] ?? ''), className: clean(r[classCol] ?? '') }))
         .filter((r) => r.fullName && r.className);
+      /* Các dòng thiếu họ tên hoặc lớp sẽ bị bỏ qua — hiện rõ ra để BTC bổ sung sau */
+      setSkipped(
+        dataRows
+          .map((r) => ({ fullName: clean(r[nameCol] ?? ''), className: clean(r[classCol] ?? '') }))
+          .filter((r) => (r.fullName && !r.className) || (!r.fullName && r.className)),
+      );
       const seen = new Set<string>();
       const unique = extracted.filter((r) => {
         const k = `${norm(r.fullName)}|${norm(r.className)}`;
@@ -296,19 +310,33 @@ export function AdminCertificates() {
     setDataRows([]);
     setColumns([]);
     try {
-      let raw: string[][];
+      let detected: ReturnType<typeof detectColumns> | null = null;
       if (/\.xlsx?$/i.test(file.name)) {
         const buf = await file.arrayBuffer();
         const wb = XLSX.read(new Uint8Array(buf), { type: 'array' });
-        const ws = wb.Sheets[wb.SheetNames[0]];
-        raw = XLSX.utils.sheet_to_json<string[]>(ws, { header: 1, defval: '' }) as string[][];
+        /* Quét mọi sheet, lấy sheet đầu tiên nhận diện được cột Họ tên/Lớp */
+        for (const sheetName of wb.SheetNames) {
+          const raw = XLSX.utils.sheet_to_json<string[]>(wb.Sheets[sheetName], {
+            header: 1,
+            defval: '',
+          }) as string[][];
+          const d = detectColumns(raw);
+          if (d.headerFound) {
+            detected = d;
+            break;
+          }
+          if (!detected) detected = d;
+        }
       } else if (/\.csv$/i.test(file.name)) {
-        raw = parseCsv(await file.text());
+        detected = detectColumns(parseCsv(await file.text()));
       } else {
         setImportError('Chỉ hỗ trợ file .xlsx, .xls và .csv.');
         return;
       }
-      const detected = detectColumns(raw);
+      if (!detected) {
+        setImportError('Không đọc được nội dung file.');
+        return;
+      }
       if (detected.dataRows.length === 0) {
         setImportError('File không có dòng dữ liệu nào.');
         return;
@@ -343,9 +371,9 @@ export function AdminCertificates() {
         const { error } = await supabase.from('certificate_records').insert(batch);
         if (error) throw error;
       }
-      const skipped = parsed.length - fresh.length;
+      const skippedCount = parsed.length - fresh.length;
       setImportResult(
-        `Đã nhập ${fresh.length} hồ sơ mới.${skipped > 0 ? ` Bỏ qua ${skipped} dòng đã có sẵn.` : ''}`,
+        `Đã nhập ${fresh.length} hồ sơ mới.${skippedCount > 0 ? ` Bỏ qua ${skippedCount} dòng đã có sẵn.` : ''}`,
       );
       setParsed([]);
       await fetchCertificates();
@@ -660,6 +688,17 @@ export function AdminCertificates() {
                 Xem trước: {parsed.length} dòng (mới: {parsed.filter((r) => !r.alreadyExists).length}
                 , đã có: {parsed.filter((r) => r.alreadyExists).length})
               </p>
+              {skipped.length > 0 && (
+                <p className="mb-2 text-xs text-amber-700">
+                  Có {skipped.length} dòng thiếu họ tên hoặc lớp nên chưa nhập được:{' '}
+                  {skipped
+                    .slice(0, 20)
+                    .map((r) => r.fullName || `(thiếu tên, lớp ${r.className})`)
+                    .join(', ')}
+                  {skipped.length > 20 ? ` và ${skipped.length - 20} dòng nữa` : ''} — BTC bổ sung
+                  đủ thông tin rồi nhập lại, hoặc nhập tay sau.
+                </p>
+              )}
               <div className="max-h-64 overflow-auto rounded-xl border border-slate-200">
                 <table className="w-full text-left text-sm">
                   <thead>
