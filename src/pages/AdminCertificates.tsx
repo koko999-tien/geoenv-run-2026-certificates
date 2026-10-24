@@ -899,8 +899,7 @@ export function AdminCertificates() {
         <div>
           <p className="font-semibold">Lưu ý bảo mật</p>
           <p className="mt-0.5 text-amber-700">
-            Không nhập số điện thoại hay thông tin nhạy cảm. Link giấy chứng nhận dán vào cột{' '}
-            <strong>certificate_url</strong> trong Supabase.
+            Không nhập số điện thoại hay thông tin nhạy cảm.
           </p>
         </div>
       </div>
