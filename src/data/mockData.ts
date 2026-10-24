@@ -49,22 +49,6 @@ export const MOCK_ALBUMS: Album[] = [
     photo_count: 0,
     created_at: new Date().toISOString(),
   },
-  {
-    id: 'test',
-    name: 'Ảnh test',
-    description: 'Ảnh test trước khi đăng tải toàn bộ — sẽ gỡ sau khi test xong',
-    cover_image_url: '/test-anh/khanh-beo-1.jpg',
-    photo_count: 6,
-    created_at: new Date().toISOString(),
-  },
 ];
 
-/* Ảnh test (Tiến gửi, trừ ảnh thẻ) — tiêu đề giữ đúng tên "khánh béo N" để test tìm kiếm */
-export const MOCK_PHOTOS: Photo[] = [
-  { id: 'test-1', album_id: 'test', title: 'khánh béo 1', description: 'Ảnh test', url: '/test-anh/khanh-beo-1.jpg', thumbnail_url: '/test-anh/khanh-beo-1.jpg', created_at: new Date().toISOString() },
-  { id: 'test-2', album_id: 'test', title: 'khánh béo 2', description: 'Ảnh test', url: '/test-anh/khanh-beo-2.jpg', thumbnail_url: '/test-anh/khanh-beo-2.jpg', created_at: new Date().toISOString() },
-  { id: 'test-4', album_id: 'test', title: 'khánh béo 4', description: 'Ảnh test', url: '/test-anh/khanh-beo-4.jpg', thumbnail_url: '/test-anh/khanh-beo-4.jpg', created_at: new Date().toISOString() },
-  { id: 'test-5', album_id: 'test', title: 'khánh béo 5', description: 'Ảnh test', url: '/test-anh/khanh-beo-5.jpg', thumbnail_url: '/test-anh/khanh-beo-5.jpg', created_at: new Date().toISOString() },
-  { id: 'test-6', album_id: 'test', title: 'khánh béo 6', description: 'Ảnh test', url: '/test-anh/khanh-beo-6.jpg', thumbnail_url: '/test-anh/khanh-beo-6.jpg', created_at: new Date().toISOString() },
-  { id: 'test-7', album_id: 'test', title: 'khánh béo 7', description: 'Ảnh test', url: '/test-anh/khanh-beo-7.jpg', thumbnail_url: '/test-anh/khanh-beo-7.jpg', created_at: new Date().toISOString() },
-];
+export const MOCK_PHOTOS: Photo[] = [];
