@@ -124,13 +124,13 @@ export function Home() {
                 <span
                   key={logo.src}
                   title={logo.alt}
-                  className="flex h-11 w-11 items-center justify-center transition-transform duration-200 hover:-translate-y-1 sm:h-14 sm:w-14"
+                  className="flex h-10 w-10 items-center justify-center transition-transform duration-200 hover:-translate-y-1 sm:h-12 sm:w-12"
                 >
                   <img
                     src={logo.src}
                     alt={logo.alt}
                     loading="lazy"
-                    className="max-h-full max-w-full object-contain drop-shadow-[0_6px_14px_rgba(0,0,0,0.4)]"
+                    className="max-h-full max-w-full object-contain drop-shadow-[0_2px_6px_rgba(0,0,0,0.35)]"
                   />
                 </span>
               ))}
