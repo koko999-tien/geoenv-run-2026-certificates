@@ -69,18 +69,21 @@ function useCountdown(target: string) {
     return () => clearInterval(timer);
   }, []);
 
-  const remaining = Math.max(0, new Date(target).getTime() - now);
+  const startTime = new Date(target).getTime();
+  const remaining = Math.max(0, startTime - now);
   return {
     days: Math.floor(remaining / 86400000),
     hours: Math.floor(remaining / 3600000) % 24,
     minutes: Math.floor(remaining / 60000) % 60,
     seconds: Math.floor(remaining / 1000) % 60,
     isStarted: remaining === 0,
+    /* Sau ngày thi đấu (quá 24 giờ kể từ giờ xuất phát) thì giải đã kết thúc */
+    isEnded: now >= startTime + 86400000,
   };
 }
 
 export function Home() {
-  const { days, hours, minutes, seconds, isStarted } = useCountdown(EVENT.startAt);
+  const { days, hours, minutes, seconds, isStarted, isEnded } = useCountdown(EVENT.startAt);
   const pad = (n: number) => String(n).padStart(2, '0');
 
   const countdownCells = [
@@ -166,7 +169,12 @@ export function Home() {
 
           {/* ============ BỘ ĐẾM NGƯỢC (thẻ kính mờ trên nền ảnh) ============ */}
           <div className="mt-12">
-            {isStarted ? (
+            {isEnded ? (
+              <p className="inline-flex items-center gap-2 rounded-2xl border border-white/25 bg-white/10 px-5 py-3 text-sm font-semibold text-white backdrop-blur sm:text-base">
+                🎉 Giải chạy đã diễn ra thành công — mời bạn tra cứu giấy chứng nhận và xem ảnh
+                sự kiện!
+              </p>
+            ) : isStarted ? (
               <p className="inline-flex items-center gap-2 rounded-2xl border border-white/25 bg-white/10 px-5 py-3 text-sm font-semibold text-white backdrop-blur sm:text-base">
                 🎉 Sự kiện đang diễn ra — chúc các vận động viên về đích an toàn!
               </p>
@@ -322,6 +330,13 @@ export function Home() {
             .
           </p>
 
+          {/* Đoạn ý nghĩa 60 năm — chỉ dùng sự kiện đã xác thực, không thêm lời phát biểu */}
+          <p className="mx-auto mt-5 max-w-2xl text-center text-sm leading-relaxed text-slate-600 sm:text-base">
+            Giải chạy năm nay mang ý nghĩa đặc biệt khi diễn ra trong năm kỷ niệm 60 năm thành
+            lập Trường Đại học Mỏ – Địa chất (1966 – 2026), đồng thời chào đón tân sinh viên K71
+            — thế hệ sinh viên mới tiếp bước truyền thống 60 năm của Nhà trường.
+          </p>
+
           <h3 className="mt-12 text-center text-2xl font-bold text-slate-900">
             Thể thức thi đấu
           </h3>
@@ -355,7 +370,7 @@ export function Home() {
               {
                 icon: Award,
                 title: 'Chứng nhận cho VĐV',
-                text: 'Vận động viên hoàn thành phần thi nhận giấy chứng nhận — tra cứu và tải về ngay tại website này.',
+                text: 'Vận động viên tham gia hợp lệ nhận giấy chứng nhận — tra cứu và tải về ngay tại website này.',
               },
             ].map((item) => (
               <div

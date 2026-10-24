@@ -95,7 +95,8 @@ export function Footer() {
 
         <div className="mt-10 border-t border-geoenv-900/60 pt-6">
           <p className="text-center text-xs text-slate-500">
-            © 2026 Khoa Môi trường, Trường Đại học Mỏ – Địa chất. Bản quyền thuộc về ban tổ chức GEOENV RUN 2026.
+            © 2026 Liên chi Đoàn Khoa Khoa học và Kỹ thuật Địa chất và Khoa Môi trường, Trường
+            Đại học Mỏ – Địa chất. Bản quyền thuộc về ban tổ chức GEOENV RUN 2026.
           </p>
         </div>
       </div>
