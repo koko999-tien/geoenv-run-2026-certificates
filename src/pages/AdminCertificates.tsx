@@ -91,6 +91,15 @@ function extractRows(raw: string[][]): { fullName: string; className: string }[]
       start = i + 1;
       break;
     }
+    /* Dự phòng: tiêu đề kiểu "Họ tên sinh viên", "Tên lớp"... — nhận theo từ khóa chứa */
+    const ni2 = cells.findIndex((c) => c.includes('tên') && !c.includes('lớp'));
+    const ci2 = cells.findIndex((c, idx) => idx !== ni2 && c.includes('lớp'));
+    if (ni2 >= 0 && ci2 >= 0) {
+      nameCol = ni2;
+      classCol = ci2;
+      start = i + 1;
+      break;
+    }
   }
   const out: { fullName: string; className: string }[] = [];
   for (let i = start; i < raw.length; i++) {
@@ -231,7 +240,7 @@ export function AdminCertificates() {
     setImportResult('');
     try {
       let raw: string[][];
-      if (/\.xlsx$/i.test(file.name)) {
+      if (/\.xlsx?$/i.test(file.name)) {
         const buf = await file.arrayBuffer();
         const wb = XLSX.read(new Uint8Array(buf), { type: 'array' });
         const ws = wb.Sheets[wb.SheetNames[0]];
@@ -239,7 +248,7 @@ export function AdminCertificates() {
       } else if (/\.csv$/i.test(file.name)) {
         raw = parseCsv(await file.text());
       } else {
-        setImportError('Chỉ hỗ trợ file .xlsx và .csv.');
+        setImportError('Chỉ hỗ trợ file .xlsx, .xls và .csv.');
         return;
       }
       const extracted = extractRows(raw);
@@ -300,10 +309,13 @@ export function AdminCertificates() {
       setParsed([]);
       await fetchCertificates();
     } catch (e) {
+      const msg = e instanceof Error ? e.message : '';
       setImportError(
-        e instanceof Error
-          ? `Nhập thất bại: ${e.message}`
-          : 'Nhập thất bại. Kiểm tra lại quyền ghi vào bảng certificate_records.',
+        /row-level security/i.test(msg)
+          ? 'Nhập thất bại do bảng đang bật bảo mật dòng (RLS) mà chưa có policy cho phép ghi. Vào Supabase Dashboard → Table Editor → bảng certificate_records → Policies → tạo policy cho phép INSERT, UPDATE, DELETE với người dùng đã đăng nhập (authenticated), rồi thử nhập lại.'
+          : msg
+            ? `Nhập thất bại: ${msg}`
+            : 'Nhập thất bại. Kiểm tra lại quyền ghi vào bảng certificate_records.',
       );
     } finally {
       setImporting(false);
@@ -534,7 +546,7 @@ export function AdminCertificates() {
             <input
               ref={fileRef}
               type="file"
-              accept=".xlsx,.csv"
+              accept=".xlsx,.xls,.csv"
               className="sr-only"
               onChange={(e) => {
                 const f = e.target.files?.[0];
@@ -547,8 +559,8 @@ export function AdminCertificates() {
             </Button>
           </div>
           <p className="mt-3 text-xs text-slate-500">
-            Hỗ trợ file .xlsx và .csv. Các cột bắt buộc: Họ tên, Lớp. Dòng đã có sẵn trong hệ
-            thống sẽ được bỏ qua, không nhập trùng.
+            Hỗ trợ file .xlsx, .xls và .csv. Các cột bắt buộc: Họ tên, Lớp. Dòng đã có sẵn trong
+            hệ thống sẽ được bỏ qua, không nhập trùng.
           </p>
 
           {importError && (
