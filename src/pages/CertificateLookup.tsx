@@ -144,6 +144,65 @@ export function CertificateLookup() {
   const [candidateRows, setCandidateRows] = useState<Record<string, any>[] | null>(null);
   /* Tối ưu: tải danh sách 1 lần rồi giữ lại, tìm lại không gọi mạng nữa */
   const rowsCache = useRef<Record<string, any>[] | null>(null);
+  /* Gợi ý lớp khi đang gõ: gõ vài chữ cái đầu là hiện các lớp trong dữ liệu */
+  const [classSuggestOpen, setClassSuggestOpen] = useState(false);
+  const [classSuggestItems, setClassSuggestItems] = useState<string[]>([]);
+  const [classSuggestActive, setClassSuggestActive] = useState(0);
+
+  /* Tải danh sách (dùng chung bộ nhớ đệm với nút tìm) để gợi ý không cần bấm tìm */
+  const ensureRows = async (): Promise<Record<string, any>[]> => {
+    if (rowsCache.current) return rowsCache.current;
+    const { data, error: supabaseError } = await supabase.from('certificate_records').select('*');
+    if (supabaseError) throw supabaseError;
+    rowsCache.current = data || [];
+    return rowsCache.current;
+  };
+
+  /* Gợi ý lớp: gõ tên trước thì ưu tiên lớp của đúng người đó; chưa gõ tên thì gợi
+     ý toàn bộ. Khớp khi chữ gõ là đầu của tên lớp (không dấu) hoặc đầu của dạng
+     viết tắt — vd "Q" hiện QLTNMT..., Quản lý...; "QL" hiện QLTNMT..., Quản lý...
+     nhưng không hiện Quản trị (viết tắt QTKD). Hiển thị đúng nguyên văn đã ghi. */
+  const updateClassSuggestions = async (typed: string, name: string) => {
+    const q = strip(typed).replace(/\s+/g, '');
+    if (!q) {
+      setClassSuggestItems([]);
+      setClassSuggestOpen(false);
+      return;
+    }
+    let all: Record<string, any>[];
+    try {
+      all = await ensureRows();
+    } catch {
+      setClassSuggestItems([]);
+      setClassSuggestOpen(false);
+      return;
+    }
+    const nameNorm = strip(name);
+    const scoped = nameNorm ? all.filter((r) => strip(r.full_name) === nameNorm) : [];
+    const pool = scoped.length > 0 ? scoped : all;
+    const seen = new Set<string>();
+    const items: string[] = [];
+    for (const r of pool) {
+      const cls = String(r.class_name ?? '');
+      if (!cls) continue;
+      const key = strip(cls);
+      if (seen.has(key)) continue;
+      const literal = key.replace(/\s+/g, '');
+      if (literal.startsWith(q) || acronym(cls).startsWith(q)) {
+        seen.add(key);
+        items.push(cls);
+      }
+      if (items.length >= 8) break;
+    }
+    setClassSuggestItems(items);
+    setClassSuggestActive(0);
+    setClassSuggestOpen(items.length > 0);
+  };
+
+  const pickClassSuggestion = (cls: string) => {
+    setForm((f) => ({ ...f, className: cls }));
+    setClassSuggestOpen(false);
+  };
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -193,6 +252,7 @@ export function CertificateLookup() {
     setResult(null);
     setCandidates(null);
     setCandidateRows(null);
+    setClassSuggestOpen(false);
 
     try {
       const nameNorm = strip(form.fullName);
@@ -373,7 +433,7 @@ export function CertificateLookup() {
             />
           </div>
 
-          <div className="space-y-2">
+          <div className="relative space-y-2">
             <label htmlFor="className" className="block text-sm font-medium text-slate-700">
               Lớp <span className="font-normal text-slate-400">(có thể bỏ trống)</span>
             </label>
@@ -384,9 +444,55 @@ export function CertificateLookup() {
               // ✏️ Sửa ví dụ gợi ý tại đây
               placeholder="Quản lý tài nguyên và môi trường K71A"
               value={form.className}
-              onChange={(e) => setForm({ ...form, className: e.target.value })}
+              onChange={(e) => {
+                setForm({ ...form, className: e.target.value });
+                void updateClassSuggestions(e.target.value, form.fullName);
+              }}
+              onFocus={() => {
+                if (form.className) void updateClassSuggestions(form.className, form.fullName);
+              }}
+              onBlur={() => setClassSuggestOpen(false)}
+              onKeyDown={(e) => {
+                if (!classSuggestOpen || classSuggestItems.length === 0) return;
+                if (e.key === 'ArrowDown') {
+                  e.preventDefault();
+                  setClassSuggestActive((a) => (a + 1) % classSuggestItems.length);
+                } else if (e.key === 'ArrowUp') {
+                  e.preventDefault();
+                  setClassSuggestActive((a) => (a - 1 + classSuggestItems.length) % classSuggestItems.length);
+                } else if (e.key === 'Enter') {
+                  e.preventDefault();
+                  pickClassSuggestion(classSuggestItems[classSuggestActive]);
+                } else if (e.key === 'Escape') {
+                  setClassSuggestOpen(false);
+                }
+              }}
               autoComplete="off"
             />
+            <p className="text-xs text-slate-400">Gõ vài chữ cái đầu để xem gợi ý lớp.</p>
+            {classSuggestOpen && classSuggestItems.length > 0 && (
+              <ul className="absolute left-0 right-0 top-full z-20 mt-1 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-lg">
+                {classSuggestItems.map((cls, i) => (
+                  <li key={cls}>
+                    <button
+                      type="button"
+                      tabIndex={-1}
+                      onMouseDown={(e) => {
+                        e.preventDefault();
+                        pickClassSuggestion(cls);
+                      }}
+                      onMouseEnter={() => setClassSuggestActive(i)}
+                      className={cn(
+                        'block w-full px-3 py-2 text-left text-sm text-slate-700',
+                        i === classSuggestActive ? 'bg-geoenv-50 text-geoenv-800' : 'hover:bg-geoenv-50',
+                      )}
+                    >
+                      {cls}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
           </div>
         </div>
 
