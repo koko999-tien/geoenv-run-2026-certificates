@@ -1,0 +1,97 @@
+@import 'tailwindcss';
+
+/* ============================================================
+   ✏️ HỆ MÀU THƯƠNG HIỆU
+   - geoenv (200→700): Xanh Navy — "tin cậy, học thuật"
+   - Dùng kèm emerald (xanh lá rừng) cho yếu tố "Môi trường"
+   Muốn đổi tông: chỉ sửa các mã màu dưới đây.
+   ============================================================ */
+@theme {
+  --color-geoenv-50: #eef6ff;
+  --color-geoenv-100: #d9eaff;
+  --color-geoenv-200: #bcd8ff;
+  --color-geoenv-300: #8dbdff;
+  --color-geoenv-400: #5a9cfb;
+  --color-geoenv-500: #2e7ae6;
+  --color-geoenv-600: #1e5fc4;
+  --color-geoenv-700: #1a4da3;
+  --color-geoenv-800: #163f83;
+  --color-geoenv-900: #16315f;
+  --color-geoenv-950: #0e2038;
+}
+
+/* ===== Nền tảng — đặt trong @layer base để KHÔNG đè màu chữ set bằng class ===== */
+@layer base {
+  html {
+    scroll-behavior: smooth;
+    touch-action: manipulation;
+  }
+
+  /* Nền sáng toàn site — chuẩn web học thuật hiện đại */
+  body {
+    @apply bg-slate-50 text-slate-700 antialiased;
+    font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  /* Tiêu đề mạc định: đậm, xám tối — nhưng trang nào set màu riêng sẽ thắng */
+  h1, h2, h3, h4 {
+    @apply font-semibold text-slate-900;
+  }
+
+  /* Bôi đen chữ mang màu thương hiệu */
+  ::selection {
+    background: rgba(30, 95, 196, 0.18);
+    color: #0e2038;
+  }
+
+  /* Thanh cuộn sáng, thanh mảnh */
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-track {
+    background: #f1f5f9;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: #cbd5e1;
+    border-radius: 999px;
+    border: 2px solid #f1f5f9;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: #94a3b8;
+  }
+}
+
+/* ===== Các khối dùng chung — @layer components để class riêng lẻ vẫn đè được ===== */
+@layer components {
+  /* Nút chính — Navy đậm */
+  .btn-primary {
+    @apply inline-flex items-center justify-center rounded-xl px-6 py-3 bg-geoenv-600 text-white font-semibold text-sm
+      shadow-[0_8px_20px_-8px_rgba(30,95,196,0.5)] transition-all duration-200
+      hover:bg-geoenv-700 hover:-translate-y-0.5
+      focus:outline-none focus:ring-2 focus:ring-geoenv-500 focus:ring-offset-2
+      disabled:opacity-60 disabled:pointer-events-none;
+  }
+
+  /* Nút phụ — viền xám, nền trắng */
+  .btn-outline {
+    @apply inline-flex items-center justify-center rounded-xl px-6 py-3 bg-white border border-slate-300
+      text-slate-700 font-semibold text-sm transition-all duration-200
+      hover:border-geoenv-400 hover:text-geoenv-700 hover:-translate-y-0.5
+      focus:outline-none focus:ring-2 focus:ring-geoenv-500 focus:ring-offset-2
+      disabled:opacity-60 disabled:pointer-events-none;
+  }
+
+  /* Ô nhập liệu — nền trắng viền xám */
+  .input-field {
+    @apply w-full rounded-xl border border-slate-300 bg-white px-4 py-3 text-sm text-slate-900
+      placeholder-slate-400 shadow-sm transition-all duration-200
+      focus:border-geoenv-500 focus:outline-none focus:ring-2 focus:ring-geoenv-500/30;
+  }
+
+  /* Thẻ trắng bo góc — dùng khắp site */
+  .card {
+    @apply rounded-2xl border border-slate-200 bg-white shadow-sm;
+  }
+}
