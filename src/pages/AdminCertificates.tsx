@@ -238,8 +238,8 @@ export function AdminCertificates() {
       setLockingRow(null);
       setLockReason('');
       await fetchCertificates();
-    } catch {
-      alert('Có lỗi xảy ra khi khóa chứng nhận.');
+    } catch (e) {
+      alert(`Có lỗi xảy ra khi khóa chứng nhận: ${supaMsg(e)}`);
     } finally {
       setLocking(false);
     }
@@ -264,8 +264,8 @@ export function AdminCertificates() {
         throw error;
       }
       await fetchCertificates();
-    } catch {
-      alert('Có lỗi xảy ra khi mở khóa.');
+    } catch (e) {
+      alert(`Có lỗi xảy ra khi mở khóa: ${supaMsg(e)}`);
     } finally {
       setLoading(false);
     }
@@ -282,8 +282,8 @@ export function AdminCertificates() {
 
       if (error) throw error;
       await fetchCertificates();
-    } catch {
-      alert('Có lỗi xảy ra khi xóa.');
+    } catch (e) {
+      alert(`Có lỗi xảy ra khi xóa: ${supaMsg(e)}`);
     } finally {
       setLoading(false);
     }
@@ -598,9 +598,49 @@ export function AdminCertificates() {
             </Button>
           </div>
           <p className="mt-3 text-xs text-slate-500">
-            Hỗ trợ file .xlsx, .xls và .csv. Các cột bắt buộc: Họ tên, Lớp. Dòng đã có sẵn trong
-            hệ thống sẽ được bỏ qua, không nhập trùng.
+            Hỗ trợ file .xlsx, .xls và .csv. Sau khi chọn file, kiểm tra kỹ bảng xem trước rồi
+            mới bấm nhập — dòng đã có sẵn trong hệ thống sẽ được bỏ qua, không nhập trùng.
           </p>
+
+          {columns.length > 0 && (
+            <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <label className="text-sm font-medium text-slate-700">
+                Cột Họ tên
+                <select
+                  value={nameCol}
+                  onChange={(e) => setNameCol(Number(e.target.value))}
+                  className="mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm"
+                >
+                  {columns.map((c, i) => (
+                    <option key={i} value={i}>
+                      {c}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="text-sm font-medium text-slate-700">
+                Cột Lớp
+                <select
+                  value={classCol}
+                  onChange={(e) => setClassCol(Number(e.target.value))}
+                  className="mt-1 w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm"
+                >
+                  {columns.map((c, i) => (
+                    <option key={i} value={i}>
+                      {c}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+          )}
+          {columns.length > 0 && (
+            <p className="mt-2 text-xs text-amber-700">
+              Nếu cột Họ tên trong bảng xem trước hiện ra số thứ tự hay tên đội thì tức là đang
+              chọn sai cột — đổi lại ở 2 ô trên. File nhập phải là danh sách thành viên (Họ tên,
+              Lớp từng vận động viên), không phải danh sách đội.
+            </p>
+          )}
 
           {importError && (
             <div className="mt-4 flex items-start gap-2.5 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">
