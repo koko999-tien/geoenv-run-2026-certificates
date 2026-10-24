@@ -108,6 +108,7 @@ export function Home() {
           src={HERO_IMAGE}
           alt=""
           aria-hidden
+          fetchPriority="high"
           className="absolute inset-0 -z-20 h-full w-full object-cover"
         />
         {/* Lớp phủ tối mờ để chữ trắng nổi bật (chuẩn chiến dịch truyền thông) */}

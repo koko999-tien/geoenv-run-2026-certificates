@@ -93,5 +93,29 @@
   /* Thẻ trắng bo góc — dùng khắp site */
   .card {
     @apply rounded-2xl border border-slate-200 bg-white shadow-sm;
+    /* Mượt khi rê chuột vào thẻ có hiệu ứng nâng (hover:-translate-y-0.5) */
+    transition: box-shadow 0.25s ease, transform 0.25s ease, border-color 0.25s ease;
+  }
+
+  /* Phản hồi khi nhấn nút: hơi lún xuống, chỉ là hiệu ứng, không đổi bố cục.
+     Nút nào đã có hiệu ứng riêng (vd .btn-primary) thì giữ nguyên hiệu ứng đó. */
+  button {
+    transition: transform 0.15s ease;
+  }
+  button:active {
+    transform: scale(0.98);
+  }
+}
+
+/* Tôn trọng người dùng bật "giảm chuyển động" trên thiết bị */
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+  *,
+  ::before,
+  ::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
   }
 }
