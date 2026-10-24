@@ -119,16 +119,20 @@ export function Home() {
               </p>
               <span className="h-px w-10 bg-gradient-to-l from-transparent to-white/40 sm:w-16" />
             </div>
-            <div className="flex flex-wrap items-center justify-center gap-x-2 gap-y-2 sm:gap-x-2.5 sm:gap-y-2.5">
+            <div className="flex flex-wrap items-center justify-center gap-2 sm:gap-3">
               {ORG_LOGOS.map((logo) => (
-                <img
+                <span
                   key={logo.src}
-                  src={logo.src}
-                  alt={logo.alt}
                   title={logo.alt}
-                  loading="lazy"
-                  className="h-[58px] w-auto drop-shadow-[0_8px_18px_rgba(0,0,0,0.4)] transition-all duration-200 hover:-translate-y-1 sm:h-[72px]"
-                />
+                  className="flex h-11 w-11 items-center justify-center transition-transform duration-200 hover:-translate-y-1 sm:h-14 sm:w-14"
+                >
+                  <img
+                    src={logo.src}
+                    alt={logo.alt}
+                    loading="lazy"
+                    className="max-h-full max-w-full object-contain drop-shadow-[0_6px_14px_rgba(0,0,0,0.4)]"
+                  />
+                </span>
               ))}
             </div>
           </div>
@@ -162,21 +166,15 @@ export function Home() {
             {EVENT.intro}
           </p>
 
-          {/* Hai nút bấm chính */}
-          <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row sm:gap-4">
+          {/* Nút hành động chính — chỉ giữ 1 nút quan trọng nhất trong banner;
+              hai chức năng đầy đủ nằm ở hàng ô ngay dưới banner */}
+          <div className="mt-8 flex items-center justify-center">
             <Link
               to="/tra-cuu"
               className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-white px-8 py-4 font-semibold text-geoenv-800 shadow-lg transition-all duration-200 hover:-translate-y-0.5 hover:bg-geoenv-50 focus:outline-none focus:ring-2 focus:ring-white focus:ring-offset-2 focus:ring-offset-geoenv-900 sm:w-auto"
             >
               <Award className="h-5 w-5" />
               Tra cứu giấy chứng nhận
-            </Link>
-            <Link
-              to="/thu-vien-anh"
-              className="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-white/40 px-8 py-4 font-semibold text-white backdrop-blur transition-all duration-200 hover:-translate-y-0.5 hover:bg-white/10 focus:outline-none focus:ring-2 focus:ring-white focus:ring-offset-2 focus:ring-offset-geoenv-900 sm:w-auto"
-            >
-              Xem thư viện ảnh
-              <ArrowRight className="h-5 w-5" />
             </Link>
           </div>
 
@@ -206,6 +204,49 @@ export function Home() {
                 ))}
               </div>
             )}
+          </div>
+        </div>
+      </section>
+
+      {/* ================= CHỨC NĂNG CHÍNH — ngay dưới banner, chạm 1 cái là tới ================= */}
+      <section className="py-10 sm:py-12">
+        <div className="mx-auto max-w-5xl px-4 sm:px-6">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            {/* Ô 1: Tra cứu giấy chứng nhận — chức năng quan trọng nhất, luôn ở đầu trang */}
+            <Link to="/tra-cuu" className="group block">
+              <div className="card flex h-full items-center gap-4 p-5 transition-all duration-200 hover:-translate-y-0.5 hover:border-geoenv-200 hover:shadow-lg sm:p-6">
+                <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-geoenv-600 shadow-md shadow-geoenv-600/25">
+                  <Award className="h-6 w-6 text-white" />
+                </span>
+                <div className="min-w-0">
+                  <h2 className="text-base font-bold text-slate-900 sm:text-lg">
+                    Tra cứu giấy chứng nhận
+                  </h2>
+                  <p className="mt-0.5 text-sm leading-snug text-slate-600">
+                    Nhập họ tên và lớp để tìm, tải giấy chứng nhận của bạn.
+                  </p>
+                </div>
+                <ArrowRight className="ml-auto h-5 w-5 shrink-0 text-geoenv-500 transition-transform group-hover:translate-x-1" />
+              </div>
+            </Link>
+
+            {/* Ô 2: Thư viện ảnh */}
+            <Link to="/thu-vien-anh" className="group block">
+              <div className="card flex h-full items-center gap-4 p-5 transition-all duration-200 hover:-translate-y-0.5 hover:border-emerald-200 hover:shadow-lg sm:p-6">
+                <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-emerald-600 shadow-md shadow-emerald-600/25">
+                  <ImageIcon className="h-6 w-6 text-white" />
+                </span>
+                <div className="min-w-0">
+                  <h2 className="text-base font-bold text-slate-900 sm:text-lg">
+                    Thư viện ảnh sự kiện
+                  </h2>
+                  <p className="mt-0.5 text-sm leading-snug text-slate-600">
+                    Xem và tải ảnh đẹp của giải chạy về máy của bạn.
+                  </p>
+                </div>
+                <ArrowRight className="ml-auto h-5 w-5 shrink-0 text-emerald-500 transition-transform group-hover:translate-x-1" />
+              </div>
+            </Link>
           </div>
         </div>
       </section>
@@ -465,58 +506,6 @@ export function Home() {
         </div>
       </section>
 
-      {/* ================= HAI CHỨC NĂNG CHÍNH ================= */}
-      <section className="pb-16 sm:pb-24">
-        <div className="mx-auto max-w-5xl px-4 sm:px-6">
-          <div className="text-center">
-            <h2 className="text-2xl font-bold text-slate-900 sm:text-3xl">Chức năng chính</h2>
-            <p className="mx-auto mt-2 max-w-xl text-sm text-slate-600 sm:text-base">
-              Tra cứu giấy chứng nhận và xem ảnh sự kiện một cách nhanh chóng, dễ dàng.
-            </p>
-          </div>
-
-          {/* Hai card bằng nhau: nền trắng, viền mảnh, bóng đổ dịu chuẩn học thuật */}
-          <div className="mt-10 grid grid-cols-1 gap-5 sm:grid-cols-2 sm:gap-6">
-            {/* ✏️ CARD 1: Tra cứu giấy chứng nhận */}
-            <Link to="/tra-cuu" className="group block h-full">
-              <div className="card flex h-full flex-col p-6 transition-all duration-200 hover:-translate-y-1 hover:border-geoenv-200 hover:shadow-lg sm:p-8">
-                <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-geoenv-50 ring-1 ring-geoenv-100">
-                  <Award className="h-6 w-6 text-geoenv-600" />
-                </span>
-                <h3 className="mt-5 text-lg font-bold text-slate-900 sm:text-xl">
-                  Tra cứu giấy chứng nhận
-                </h3>
-                <p className="mt-2 text-sm leading-relaxed text-slate-600">
-                  Nhập họ tên và lớp để tìm và tải giấy chứng nhận tham gia giải chạy.
-                </p>
-                <div className="mt-auto flex items-center gap-2 pt-6 text-sm font-semibold text-geoenv-600">
-                  Bắt đầu tra cứu
-                  <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
-                </div>
-              </div>
-            </Link>
-
-            {/* ✏️ CARD 2: Thư viện ảnh */}
-            <Link to="/thu-vien-anh" className="group block h-full">
-              <div className="card flex h-full flex-col p-6 transition-all duration-200 hover:-translate-y-1 hover:border-emerald-200 hover:shadow-lg sm:p-8">
-                <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-emerald-50 ring-1 ring-emerald-100">
-                  <ImageIcon className="h-6 w-6 text-emerald-600" />
-                </span>
-                <h3 className="mt-5 text-lg font-bold text-slate-900 sm:text-xl">
-                  Thư viện ảnh sự kiện
-                </h3>
-                <p className="mt-2 text-sm leading-relaxed text-slate-600">
-                  Xem ảnh sự kiện, mở ảnh lớn và tải ảnh về thiết bị của bạn.
-                </p>
-                <div className="mt-auto flex items-center gap-2 pt-6 text-sm font-semibold text-emerald-600">
-                  Xem ảnh sự kiện
-                  <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-1" />
-                </div>
-              </div>
-            </Link>
-          </div>
-        </div>
-      </section>
     </div>
   );
 }
