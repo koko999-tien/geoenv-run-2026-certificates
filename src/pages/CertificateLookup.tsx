@@ -148,6 +148,10 @@ export function CertificateLookup() {
   const [classSuggestOpen, setClassSuggestOpen] = useState(false);
   const [classSuggestItems, setClassSuggestItems] = useState<string[]>([]);
   const [classSuggestActive, setClassSuggestActive] = useState(0);
+  /* Gợi ý tên VĐV khi đang gõ: chỉ cần gõ họ là hiện tên đầy đủ kèm lớp để phân biệt */
+  const [nameSuggestOpen, setNameSuggestOpen] = useState(false);
+  const [nameSuggestItems, setNameSuggestItems] = useState<Candidate[]>([]);
+  const [nameSuggestActive, setNameSuggestActive] = useState(0);
 
   /* Tải danh sách (dùng chung bộ nhớ đệm với nút tìm) để gợi ý không cần bấm tìm */
   const ensureRows = async (): Promise<Record<string, any>[]> => {
@@ -202,6 +206,54 @@ export function CertificateLookup() {
   const pickClassSuggestion = (cls: string) => {
     setForm((f) => ({ ...f, className: cls }));
     setClassSuggestOpen(false);
+  };
+
+  /* Gợi ý tên: khớp khi chữ gõ là đầu họ tên ("nguyen" -> Nguyễn...) hoặc bắt đầu
+     từ đầu một chữ trong tên ("minh duc" -> Nguyễn Minh Đức). Gõ họ thì các tên
+     họ đó lên trước; mỗi gợi ý kèm lớp để phân biệt các VĐV trùng tên. */
+  const updateNameSuggestions = async (typed: string) => {
+    const q = strip(typed);
+    if (!q) {
+      setNameSuggestItems([]);
+      setNameSuggestOpen(false);
+      return;
+    }
+    let all: Record<string, any>[];
+    try {
+      all = await ensureRows();
+    } catch {
+      setNameSuggestItems([]);
+      setNameSuggestOpen(false);
+      return;
+    }
+    const seen = new Set<string>();
+    const prefix: Candidate[] = [];
+    const word: Candidate[] = [];
+    for (const r of all) {
+      const fullName = String(r.full_name ?? '');
+      const className = String(r.class_name ?? '');
+      if (!fullName) continue;
+      const key = `${strip(fullName)}|${strip(className)}`;
+      if (seen.has(key)) continue;
+      const nameNorm = strip(fullName);
+      if (nameNorm.startsWith(q)) {
+        seen.add(key);
+        prefix.push({ fullName, className });
+      } else if (nameNorm.includes(` ${q}`)) {
+        seen.add(key);
+        word.push({ fullName, className });
+      }
+    }
+    const items = [...prefix, ...word].slice(0, 8);
+    setNameSuggestItems(items);
+    setNameSuggestActive(0);
+    setNameSuggestOpen(items.length > 0);
+  };
+
+  /* Chọn 1 VĐV: điền cả tên và lớp của đúng người đó để bấm tìm là ra ngay */
+  const pickNameSuggestion = (item: Candidate) => {
+    setForm({ fullName: item.fullName, className: item.className });
+    setNameSuggestOpen(false);
   };
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -415,7 +467,7 @@ export function CertificateLookup() {
         className="card mt-8 p-5 shadow-md sm:p-7"
       >
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <div className="space-y-2">
+          <div className="relative space-y-2">
             <label htmlFor="fullName" className="block text-sm font-medium text-slate-700">
               Họ và tên <span className="text-red-500">*</span>
             </label>
@@ -428,9 +480,58 @@ export function CertificateLookup() {
               // ✏️ Sửa ví dụ gợi ý tại đây
               placeholder="Nguyễn Văn A"
               value={form.fullName}
-              onChange={(e) => setForm({ ...form, fullName: e.target.value })}
+              onChange={(e) => {
+                setForm({ ...form, fullName: e.target.value });
+                void updateNameSuggestions(e.target.value);
+              }}
+              onFocus={() => {
+                if (form.fullName) void updateNameSuggestions(form.fullName);
+              }}
+              onBlur={() => setNameSuggestOpen(false)}
+              onKeyDown={(e) => {
+                if (!nameSuggestOpen || nameSuggestItems.length === 0) return;
+                if (e.key === 'ArrowDown') {
+                  e.preventDefault();
+                  setNameSuggestActive((a) => (a + 1) % nameSuggestItems.length);
+                } else if (e.key === 'ArrowUp') {
+                  e.preventDefault();
+                  setNameSuggestActive((a) => (a - 1 + nameSuggestItems.length) % nameSuggestItems.length);
+                } else if (e.key === 'Enter') {
+                  e.preventDefault();
+                  pickNameSuggestion(nameSuggestItems[nameSuggestActive]);
+                } else if (e.key === 'Escape') {
+                  setNameSuggestOpen(false);
+                }
+              }}
               autoComplete="off"
             />
+            <p className="text-xs text-slate-400">Gõ họ (ví dụ: Nguyễn) để xem gợi ý tên VĐV.</p>
+            {nameSuggestOpen && nameSuggestItems.length > 0 && (
+              <ul className="absolute left-0 right-0 top-full z-20 mt-1 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-lg">
+                {nameSuggestItems.map((item, i) => (
+                  <li key={`${item.fullName}|${item.className}`}>
+                    <button
+                      type="button"
+                      tabIndex={-1}
+                      onMouseDown={(e) => {
+                        e.preventDefault();
+                        pickNameSuggestion(item);
+                      }}
+                      onMouseEnter={() => setNameSuggestActive(i)}
+                      className={cn(
+                        'block w-full px-3 py-2 text-left',
+                        i === nameSuggestActive ? 'bg-geoenv-50 text-geoenv-800' : 'hover:bg-geoenv-50',
+                      )}
+                    >
+                      <span className="block text-sm font-medium text-slate-800">{item.fullName}</span>
+                      {item.className && (
+                        <span className="block text-xs text-slate-400">{item.className}</span>
+                      )}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
           </div>
 
           <div className="relative space-y-2">
