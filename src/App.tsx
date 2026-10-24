@@ -1,4 +1,5 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
+import { supabase } from './lib/supabase';
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { Layout } from './components/Layout';
 import { AdminLayout } from './components/AdminLayout';
@@ -22,8 +23,20 @@ function ProtectedRoute({ children, isAuthenticated }: { children: React.ReactNo
 const App = () => {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
 
+  /* Phiên đăng nhập quản trị lấy từ Supabase Auth — tải lại trang vẫn còn đăng nhập */
+  useEffect(() => {
+    supabase.auth.getSession().then(({ data }) => setIsAuthenticated(!!data.session));
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, session) => {
+      setIsAuthenticated(!!session);
+    });
+    return () => listener.subscription.unsubscribe();
+  }, []);
+
   const handleLogin = () => setIsAuthenticated(true);
-  const handleLogout = () => setIsAuthenticated(false);
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    setIsAuthenticated(false);
+  };
 
   return (
     <BrowserRouter>
