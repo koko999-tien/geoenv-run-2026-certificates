@@ -6,7 +6,6 @@ import {
   Calendar,
   Camera,
   Clock3,
-  Crown,
   Flag,
   Heart,
   Image as ImageIcon,
@@ -249,19 +248,11 @@ export function Home() {
         </div>
       </section>
 
-      {/* ================= DẢI VINH DANH 60 NĂM + 3 CHỈ SỐ GIẢI ĐẤU ================= */}
+      {/* ================= 3 CHỈ SỐ GIẢI ĐẤU ================= */}
       <section className="bg-gradient-to-r from-geoenv-800 via-geoenv-700 to-geoenv-800 py-8 sm:py-10 lg:py-16">
         <div className="mx-auto max-w-5xl px-4 sm:px-6 lg:max-w-7xl lg:px-8">
-          {/* Dải băng vinh danh — đặt trang trọng ở vị trí cao nhất của khối */}
-          <div className="flex justify-center">
-            <p className="inline-flex max-w-full items-center justify-center gap-2 rounded-full border border-white/20 bg-white/10 px-4 py-1.5 text-center text-xs font-semibold tracking-wide text-yellow-300 backdrop-blur-md md:text-sm">
-              <Crown className="h-4 w-4 shrink-0" />
-              HƯỚNG TỚI KỶ NIỆM 60 NĂM THÀNH LẬP TRƯỜNG ĐH MỎ – ĐỊA CHẤT (1966 – 2026)
-            </p>
-          </div>
-
           {/* Đúng 3 chỉ số kỹ thuật của giải — đối xứng 3 cột trên mọi màn hình */}
-          <div className="mx-auto mt-8 grid max-w-3xl grid-cols-3 gap-4 sm:gap-6">
+          <div className="mx-auto grid max-w-3xl grid-cols-3 gap-4 sm:gap-6">
             {[
               { icon: Flag, value: '85', label: 'Đội thi đấu' },
               { icon: Users, value: '425', label: 'Vận động viên' },
