@@ -257,6 +257,8 @@ export function CertificateLookup() {
   };
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  /* Ẩn khung xem trước nếu ảnh không tải được (nút tải vẫn hoạt động bình thường) */
+  const [previewFailed, setPreviewFailed] = useState(false);
 
   /* Kết quả cho 1 bản ghi: đủ điều kiện -> tải; bị khóa -> hiện lý do, không cho tải */
   const resolveRecord = (record: Record<string, any>): SearchResult => {
@@ -304,6 +306,7 @@ export function CertificateLookup() {
     setResult(null);
     setCandidates(null);
     setCandidateRows(null);
+    setPreviewFailed(false);
     setClassSuggestOpen(false);
 
     try {
@@ -407,6 +410,7 @@ export function CertificateLookup() {
     const rows = (candidateRows || []).filter((r) => strip(r.class_name) === strip(c.className));
     if (rows.length === 1) {
       setResult(resolveRecord(rows[0]));
+      setPreviewFailed(false);
       setCandidates(null);
     } else if (rows.length > 1) {
       setResult({
@@ -430,6 +434,25 @@ export function CertificateLookup() {
     window.open(result.certificateUrl, '_blank', 'noopener');
   };
 
+  /* Ảnh xem trước: link Drive dạng tải trực tiếp nhúng không đẹp nên đổi sang ảnh
+     thu nhỏ của Drive; link khác (vd Supabase) thì dùng trực tiếp */
+  const previewUrl = (url: string): string => {
+    const m = url.match(/[?&]id=([^&]+)/);
+    if (url.includes('drive.google.com') && m) {
+      return `https://drive.google.com/thumbnail?id=${m[1]}&sz=w1200`;
+    }
+    return url;
+  };
+
+  /* Bấm vào ảnh xem trước thì mở trang xem lớn của Drive thay vì tải về */
+  const viewUrl = (url: string): string => {
+    const m = url.match(/[?&]id=([^&]+)/);
+    if (url.includes('drive.google.com') && m) {
+      return `https://drive.google.com/file/d/${m[1]}/view`;
+    }
+    return url;
+  };
+
   const notFoundTips = [
     'Gõ tên không cần dấu cũng được (ví dụ: "nguyen van a").',
     'Lớp nên gõ tên đầy đủ (ví dụ: "Quản lý tài nguyên và môi trường K71A").',
@@ -451,7 +474,7 @@ export function CertificateLookup() {
         <span className="inline-flex items-center gap-2 rounded-full bg-geoenv-50 px-4 py-1.5 text-xs font-semibold tracking-wide text-geoenv-700 ring-1 ring-geoenv-100 sm:text-sm">
           🏅 Giấy chứng nhận
         </span>
-        <h1 className="mt-4 text-2xl font-bold text-slate-900 sm:text-3xl">
+        <h1 className="mt-4 text-3xl font-bold text-slate-900 sm:text-4xl">
           Tra cứu giấy chứng nhận
         </h1>
         <p className="mx-auto mt-2 max-w-md text-sm leading-relaxed text-slate-600">
@@ -464,7 +487,7 @@ export function CertificateLookup() {
       {/* Form tra cứu — thẻ trắng chuẩn học thuật */}
       <form
         onSubmit={handleSubmit}
-        className="card mt-8 p-5 shadow-md sm:p-7"
+        className="card mt-8 rounded-3xl p-5 shadow-lg sm:p-7"
       >
         <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
           <div className="relative space-y-2">
@@ -614,50 +637,57 @@ export function CertificateLookup() {
         </div>
       )}
 
-      {/* Kết quả tra cứu */}
+      {/* Kết quả tra cứu — thẻ nổi bật: dải trạng thái + tên lớn + xem trước + nút tải to */}
       {result && (
         <div
           className={cn(
-            'mt-5 rounded-2xl border p-5',
+            'mt-6 overflow-hidden rounded-3xl border bg-white shadow-xl',
             result.locked
-              ? 'border-red-200 bg-red-50'
+              ? 'border-red-200'
               : result.found && result.unique
-                ? 'border-emerald-200 bg-emerald-50'
-                : 'border-amber-200 bg-amber-50',
+                ? 'border-emerald-200'
+                : 'border-amber-200',
           )}
         >
-          <div className="flex items-start gap-3">
-            {result.locked ? (
-              <Lock className="mt-0.5 h-6 w-6 shrink-0 text-red-600" />
-            ) : result.found && result.unique ? (
-              <CheckCircle className="mt-0.5 h-6 w-6 shrink-0 text-emerald-600" />
-            ) : (
-              <Info className="mt-0.5 h-6 w-6 shrink-0 text-amber-600" />
+          {/* Dải trạng thái */}
+          <div
+            className={cn(
+              'flex items-center gap-3 px-5 py-4 sm:px-6',
+              result.locked
+                ? 'bg-red-600'
+                : result.found && result.unique
+                  ? 'bg-emerald-600'
+                  : 'bg-amber-500',
             )}
-            <div className="min-w-0 flex-1">
-              <p
-                className={cn(
-                  'text-base font-semibold sm:text-lg',
-                  result.locked
-                    ? 'text-red-800'
-                    : result.found && result.unique
-                      ? 'text-emerald-800'
-                      : 'text-amber-800',
-                )}
-              >
-                {result.message}
-              </p>
+          >
+            {result.locked ? (
+              <Lock className="h-6 w-6 shrink-0 text-white" />
+            ) : result.found && result.unique ? (
+              <CheckCircle className="h-6 w-6 shrink-0 text-white" />
+            ) : (
+              <Info className="h-6 w-6 shrink-0 text-white" />
+            )}
+            <p className="text-base font-bold text-white sm:text-lg">{result.message}</p>
+          </div>
 
+          {(result.fullName || result.className || result.locked || (result.found && result.unique)) && (
+            <div className="px-5 py-5 sm:px-6">
               {(result.fullName || result.className) && (
-                <p className="mt-1 text-sm text-slate-600">
-                  <span className="font-bold text-slate-900">{result.fullName}</span>
-                  {result.className && <span> • Lớp {result.className}</span>}
-                </p>
+                <div className="text-center">
+                  <p className="text-xl font-bold text-slate-900 sm:text-2xl">{result.fullName}</p>
+                  {result.className && (
+                    <p className="mt-2">
+                      <span className="inline-flex items-center rounded-full bg-geoenv-50 px-3 py-1 text-sm font-medium text-geoenv-700 ring-1 ring-geoenv-100">
+                        Lớp {result.className}
+                      </span>
+                    </p>
+                  )}
+                </div>
               )}
 
               {/* Bị khóa do vi phạm: không cho tải, hiện lý do + mail BTC */}
               {result.locked && (
-                <div className="mt-4 space-y-2 rounded-xl border border-red-200 bg-white p-3 text-sm text-red-800">
+                <div className="mt-4 space-y-2 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-800">
                   <p>
                     <span className="font-semibold">Lý do: </span>
                     {result.lockReason ?? 'Vi phạm quy chế giải chạy.'}
@@ -677,14 +707,40 @@ export function CertificateLookup() {
 
               {/* Trạng thái đủ điều kiện — chỉ hiện khi không bị khóa */}
               {result.found && result.unique && !result.locked && (
-                <div className="mt-4">
+                <div className="mt-5">
                   {result.certificateUrl ? (
-                    <Button variant="primary" className="text-sm" onClick={handleOpenCertificate}>
-                      <Download className="h-4 w-4" />
-                      Tải giấy chứng nhận
-                    </Button>
+                    <>
+                      {!previewFailed && (
+                        <figure>
+                          <a
+                            href={viewUrl(result.certificateUrl)}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            title="Bấm để xem ảnh lớn"
+                          >
+                            <img
+                              src={previewUrl(result.certificateUrl)}
+                              alt={`Giấy chứng nhận của ${result.fullName ?? ''}`}
+                              className="h-auto w-full rounded-2xl border border-slate-200 shadow-sm"
+                              onError={() => setPreviewFailed(true)}
+                            />
+                          </a>
+                          <figcaption className="mt-2 text-center text-xs text-slate-400">
+                            Xem trước giấy chứng nhận — bấm vào ảnh để xem bản lớn.
+                          </figcaption>
+                        </figure>
+                      )}
+                      <Button
+                        variant="primary"
+                        className="mt-4 w-full text-base"
+                        onClick={handleOpenCertificate}
+                      >
+                        <Download className="h-5 w-5" />
+                        Tải giấy chứng nhận
+                      </Button>
+                    </>
                   ) : (
-                    <div className="flex items-start gap-2 rounded-xl border border-emerald-200 bg-white p-3 text-sm text-emerald-800">
+                    <div className="flex items-start gap-2 rounded-2xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800">
                       <Info className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" />
                       <span>
                         Giấy chứng nhận của bạn đã được lưu trong hệ thống. Ban tổ chức đang gắn
@@ -695,13 +751,13 @@ export function CertificateLookup() {
                 </div>
               )}
             </div>
-          </div>
+          )}
         </div>
       )}
 
       {/* Chọn lớp khi tên khớp mà lớp gõ chưa khớp */}
       {candidates && candidates.length > 0 && (
-        <div className="card mt-4 p-5">
+        <div className="card mt-4 rounded-3xl p-5">
           <p className="text-sm font-semibold text-slate-900">
             Tìm thấy tên <span className="text-geoenv-700">{candidates[0].fullName}</span> với
             các lớp sau — bấm đúng lớp của bạn:
@@ -723,7 +779,7 @@ export function CertificateLookup() {
 
       {/* Gợi ý khi không tìm thấy */}
       {result && !result.found && (
-        <div className="card mt-4 p-5">
+        <div className="card mt-4 rounded-3xl p-5">
           <div className="flex items-center gap-2 text-sm font-semibold text-slate-900">
             <Lightbulb className="h-5 w-5 text-geoenv-600" />
             Gợi ý khi không tìm thấy:
