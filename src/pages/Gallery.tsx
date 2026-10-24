@@ -1,20 +1,55 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Search, Image as ImageIcon, Download, ArrowLeft, ArrowRight, X, Camera } from 'lucide-react';
-import { MOCK_ALBUMS, MOCK_PHOTOS } from '../data/mockData';
+import { supabase } from '../lib/supabase';
+import { driveDownloadUrl } from '../lib/drive';
+import type { Album, Photo } from '../types/index';
 
-/* ============================================================
-   📸 DỮ LIỆU ẢNH SỰ KIỆN — hiện dùng dữ liệu MẪU (src/data/mockData.ts)
-   ✏️ KHI CÓ LINK ẢNH THẬT: mở src/data/mockData.ts và dán link vào cột url.
-   ============================================================ */
+/* Ảnh sự kiện lấy từ bảng albums/photos trong Supabase (quản trị viên thêm bằng link Drive). */
 
 export function Gallery() {
   const [search, setSearch] = useState('');
   const [selectedAlbum, setSelectedAlbum] = useState<string>('all');
   const [viewerOpen, setViewerOpen] = useState(false);
   const [currentIndex, setCurrentIndex] = useState(0);
+  const [albums, setAlbums] = useState<Album[]>([]);
+  const [photoRows, setPhotoRows] = useState<Photo[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const photos = MOCK_PHOTOS.filter(
+  /* Tải album + ảnh từ Supabase; bảng chưa có hoặc lỗi thì hiện trạng thái trống, không vỡ trang */
+  useEffect(() => {
+    const load = async () => {
+      try {
+        const [aRes, pRes] = await Promise.all([
+          supabase.from('albums').select('*').order('created_at', { ascending: true }),
+          supabase.from('photos').select('*').order('created_at', { ascending: false }),
+        ]);
+        const rows = (pRes.data ?? []) as Photo[];
+        const counts = new Map<string, number>();
+        const covers = new Map<string, string>();
+        rows.forEach((p) => {
+          counts.set(p.album_id, (counts.get(p.album_id) ?? 0) + 1);
+          if (!covers.has(p.album_id)) covers.set(p.album_id, p.thumbnail_url || p.url);
+        });
+        setAlbums(
+          ((aRes.data ?? []) as Album[]).map((a) => ({
+            ...a,
+            cover_image_url: covers.get(a.id) ?? null,
+            photo_count: counts.get(a.id) ?? 0,
+          })),
+        );
+        setPhotoRows(rows);
+      } catch {
+        setAlbums([]);
+        setPhotoRows([]);
+      } finally {
+        setLoading(false);
+      }
+    };
+    void load();
+  }, []);
+
+  const photos = photoRows.filter(
     (p) =>
       (selectedAlbum === 'all' || p.album_id === selectedAlbum) &&
       p.title.toLowerCase().includes(search.toLowerCase())
@@ -54,12 +89,12 @@ export function Gallery() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [viewerOpen, photos.length]);
 
-  /* Tải: mở tab mới — tương thích mọi loại link ảnh */
+  /* Tải: mở link tải trực tiếp — tương thích mọi loại link ảnh */
   const downloadPhoto = (photo: { url: string }) => {
-    window.open(photo.url, '_blank', 'noopener');
+    window.open(driveDownloadUrl(photo.url), '_blank', 'noopener');
   };
 
-  const currentAlbum = MOCK_ALBUMS.find((a) => a.id === selectedAlbum);
+  const currentAlbum = albums.find((a) => a.id === selectedAlbum);
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-10 sm:py-14">
@@ -96,8 +131,8 @@ export function Gallery() {
 
         {/* Các nút album — trượt ngang trên điện thoại */}
         <div className="mt-3 flex gap-2 overflow-x-auto pb-1 [scrollbar-width:thin]">
-          {(['all', ...MOCK_ALBUMS.map((a) => a.id)] as string[]).map((albumId) => {
-            const label = albumId === 'all' ? 'Tất cả album' : MOCK_ALBUMS.find((a) => a.id === albumId)?.name ?? '';
+          {(['all', ...albums.map((a) => a.id)] as string[]).map((albumId) => {
+            const label = albumId === 'all' ? 'Tất cả album' : albums.find((a) => a.id === albumId)?.name ?? '';
             const active = selectedAlbum === albumId;
             return (
               <button
@@ -117,14 +152,20 @@ export function Gallery() {
 
         <p className="mt-3 flex items-center gap-1.5 text-xs text-slate-500">
           <ImageIcon className="h-3.5 w-3.5" />
-          {photos.length > 0
-            ? `${photos.length} ảnh${currentAlbum ? ` — album ${currentAlbum.name}` : ''}`
-            : 'Không có ảnh phù hợp'}
+          {loading
+            ? 'Đang tải ảnh...'
+            : photos.length > 0
+              ? `${photos.length} ảnh${currentAlbum ? ` — album ${currentAlbum.name}` : ''}`
+              : 'Không có ảnh phù hợp'}
         </p>
       </div>
 
       {/* Lưới ảnh */}
-      {photos.length === 0 ? (
+      {loading ? (
+        <div className="card mt-6 py-14 text-center sm:py-20">
+          <p className="text-base font-semibold text-slate-900 sm:text-lg">Đang tải ảnh...</p>
+        </div>
+      ) : photos.length === 0 ? (
         <div className="card mt-6 py-14 text-center sm:py-20">
           <Camera className="mx-auto mb-4 h-10 w-10 text-slate-300" />
           <p className="text-base font-semibold text-slate-900 sm:text-lg">
@@ -144,7 +185,7 @@ export function Gallery() {
               aria-label={`Mở ảnh: ${photo.title}`}
             >
               <img
-                src={photo.url}
+                src={photo.thumbnail_url || photo.url}
                 alt={photo.title}
                 loading="lazy"
                 decoding="async"
@@ -206,7 +247,7 @@ export function Gallery() {
             </button>
 
             <img
-              src={photos[currentIndex].url}
+              src={photos[currentIndex].thumbnail_url || photos[currentIndex].url}
               alt={photos[currentIndex].title}
               className="max-h-[70vh] max-w-full rounded-2xl object-contain shadow-2xl"
             />

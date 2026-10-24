@@ -15,8 +15,6 @@ export function AdminDashboard() {
   const [stats, setStats] = useState<Stats>({
     totalCertificates: 0,
     eligibleCount: 0,
-    /* Thư viện ảnh thật chưa được ghép vào nên để 0 cho khớp với trang công khai,
-       không lấy số mẫu như trước nữa */
     totalAlbums: 0,
     totalPhotos: 0,
     loading: true,
@@ -26,17 +24,21 @@ export function AdminDashboard() {
   useEffect(() => {
     const loadStats = async () => {
       try {
-        const [totalRes, eligibleRes] = await Promise.all([
+        const [totalRes, eligibleRes, albumsRes, photosRes] = await Promise.all([
           supabase.from('certificate_records').select('*', { count: 'exact', head: true }),
           supabase
             .from('certificate_records')
             .select('*', { count: 'exact', head: true })
             .eq('is_eligible', true),
+          supabase.from('albums').select('*', { count: 'exact', head: true }),
+          supabase.from('photos').select('*', { count: 'exact', head: true }),
         ]);
         setStats((s) => ({
           ...s,
           totalCertificates: totalRes.count ?? 0,
           eligibleCount: eligibleRes.count ?? 0,
+          totalAlbums: albumsRes.count ?? 0,
+          totalPhotos: photosRes.count ?? 0,
           loading: false,
         }));
       } catch {
