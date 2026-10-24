@@ -45,13 +45,14 @@ const EVENT = {
    File đã chuẩn hoá khung 200×200 (public/logos) nên luôn bằng nhau, thẳng hàng.
    Muốn thay logo: lưu file mới vào public/logos với đúng tên bên dưới. */
 const ORG_LOGOS = [
-  /* ✏️ 5 file *-sticker.png: viền trắng VẼ BÁM THEO ĐƯỜNG VIỀT từng logo (decal),
-     lề an toàn đã kiểm chứng — hiển thị trực tiếp, không cần khung CSS trắng */
-  { src: '/logos/co-doan-sticker.png', alt: 'Đoàn Thanh niên Cộng sản Hồ Chí Minh' },
-  { src: '/logos/hoi-sinh-vien-sticker.png', alt: 'Hội Sinh viên Việt Nam' },
-  { src: '/logos/logo-humg-sticker.png', alt: 'Trường Đại học Mỏ – Địa chất' },
-  { src: '/logos/khoa-dia-chat-sticker.png', alt: 'Khoa Khoa học & Kỹ thuật Địa chất' },
-  { src: '/logos/khoa-moi-truong-sticker.png', alt: 'Khoa Môi trường' },
+  /* ✏️ Dùng file logo GỐC (đã tách nền). Mỗi logo được đặt trong huy hiệu tròn
+     nền trắng (xem khối "Đơn vị tổ chức" ở Hero) nên không bao giờ bị xuyên
+     thấu nền web, mép luôn sắc nét. Thứ tự: Đoàn — Hội SV — Trường — 2 Khoa. */
+  { src: '/logos/co-doan.png', alt: 'Đoàn Thanh niên Cộng sản Hồ Chí Minh' },
+  { src: '/logos/hoi-sinh-vien.png', alt: 'Hội Sinh viên Việt Nam' },
+  { src: '/logos/logo-humg.png', alt: 'Trường Đại học Mỏ – Địa chất' },
+  { src: '/logos/khoa-dia-chat.png', alt: 'Khoa Khoa học & Kỹ thuật Địa chất' },
+  { src: '/logos/khoa-moi-truong.png', alt: 'Khoa Môi trường' },
 ];
 
 /* Ảnh nền Hero — ảnh thật GEOENV RUN mùa 1 (02/11/2025), chụp trước backdrop
@@ -111,28 +112,28 @@ export function Home() {
         <div className="mx-auto max-w-3xl px-4 py-20 text-center sm:py-28">
           {/* 🏛️ Hàng đơn vị tổ chức — chuẩn "hàng tài trợ":
                  nhãn chữ có đường kẻ mảnh hai bên + 5 logo sticker trắng đồng khổ nổi trên nền tối */}
-          <div className="mb-10 flex flex-col items-center gap-4">
-            <div className="flex items-center gap-3">
-              <span className="h-px w-10 bg-gradient-to-r from-transparent to-white/40 sm:w-16" />
-              <p className="text-[11px] font-bold uppercase tracking-[0.3em] text-white sm:text-xs">
+          <div className="mb-6 flex flex-col items-center md:mb-8">
+            <div className="flex items-center justify-center gap-3">
+              <span className="h-px w-10 bg-white/30 md:w-16" />
+              <p className="text-xs font-semibold uppercase tracking-widest text-white/90 md:text-sm">
                 Đơn vị tổ chức
               </p>
-              <span className="h-px w-10 bg-gradient-to-l from-transparent to-white/40 sm:w-16" />
+              <span className="h-px w-10 bg-white/30 md:w-16" />
             </div>
-            <div className="flex flex-wrap items-center justify-center gap-6 sm:gap-8">
+            <div className="mt-3 flex items-center justify-center gap-3 md:gap-5">
               {ORG_LOGOS.map((logo) => (
-                <span
+                <div
                   key={logo.src}
                   title={logo.alt}
-                  className="flex h-10 w-10 items-center justify-center transition-transform duration-200 hover:-translate-y-1 sm:h-12 sm:w-12"
+                  className="flex h-11 w-11 items-center justify-center rounded-full border border-white/40 bg-white p-1.5 shadow-lg backdrop-blur-sm transition-transform hover:scale-105 md:h-13 md:w-13 md:p-2"
                 >
                   <img
                     src={logo.src}
                     alt={logo.alt}
                     loading="lazy"
-                    className="max-h-full max-w-full object-contain"
+                    className="h-full w-full object-contain"
                   />
-                </span>
+                </div>
               ))}
             </div>
           </div>
