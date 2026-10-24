@@ -120,7 +120,7 @@ export function Feedback() {
 
           <div>
             <label htmlFor="fb-name" className="mb-1.5 block text-sm font-semibold text-slate-900">
-              Họ tên <span className="font-normal text-slate-500">(không bắt buộc)</span>
+              Họ tên <span className="whitespace-nowrap font-normal text-slate-500">(không bắt buộc)</span>
             </label>
             <input
               id="fb-name"
@@ -135,7 +135,7 @@ export function Feedback() {
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
             <div>
               <label htmlFor="fb-team" className="mb-1.5 block text-sm font-semibold text-slate-900">
-                Đội <span className="font-normal text-slate-500">(không bắt buộc)</span>
+                Đội <span className="whitespace-nowrap font-normal text-slate-500">(không bắt buộc)</span>
               </label>
               <input
                 id="fb-team"
@@ -147,7 +147,7 @@ export function Feedback() {
             </div>
             <div>
               <label htmlFor="fb-class" className="mb-1.5 block text-sm font-semibold text-slate-900">
-                Lớp <span className="font-normal text-slate-500">(không bắt buộc)</span>
+                Lớp <span className="whitespace-nowrap font-normal text-slate-500">(không bắt buộc)</span>
               </label>
               <input
                 id="fb-class"
@@ -159,7 +159,7 @@ export function Feedback() {
             </div>
             <div>
               <label htmlFor="fb-bib" className="mb-1.5 block text-sm font-semibold text-slate-900">
-                Số BIB của bạn <span className="font-normal text-slate-500">(không bắt buộc)</span>
+                Số BIB của bạn <span className="whitespace-nowrap font-normal text-slate-500">(không bắt buộc)</span>
               </label>
               <input
                 id="fb-bib"
@@ -189,7 +189,7 @@ export function Feedback() {
 
           <div>
             <label htmlFor="fb-contact" className="mb-1.5 block text-sm font-semibold text-slate-900">
-              SĐT hoặc email liên hệ <span className="font-normal text-slate-500">(không bắt buộc)</span>
+              SĐT hoặc email liên hệ <span className="whitespace-nowrap font-normal text-slate-500">(không bắt buộc)</span>
             </label>
             <input
               id="fb-contact"
