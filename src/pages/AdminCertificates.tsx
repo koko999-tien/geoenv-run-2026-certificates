@@ -557,7 +557,14 @@ export function AdminCertificates() {
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {pageRows.map((row, index) => (
-                  <tr key={row.id} className="transition-colors hover:bg-slate-50">
+                  <tr
+                    key={row.id}
+                    className={`transition-colors ${
+                      row.is_eligible
+                        ? 'hover:bg-slate-50'
+                        : 'bg-red-50 hover:bg-red-100/70'
+                    }`}
+                  >
                     <td className="px-5 py-4 text-sm text-slate-400">
                       {(safePage - 1) * pageSize + index + 1}
                     </td>
