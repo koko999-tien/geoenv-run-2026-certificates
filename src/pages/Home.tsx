@@ -323,7 +323,7 @@ export function Home() {
           <h2 className="text-center text-xs font-bold uppercase tracking-[0.2em] text-geoenv-600">
             Sơ đồ đường chạy
           </h2>
-          <p className="mx-auto mt-5 max-w-2xl px-4 text-center text-pretty text-sm leading-relaxed text-slate-700 sm:text-base">
+          <p className="mx-auto mt-5 max-w-2xl px-4 text-justify text-pretty text-sm leading-relaxed text-slate-700 sm:text-base">
             Đường chạy đi-về trên cùng một đoạn đường: xuất phát tại P. Nguyễn Đình Tứ,
             chạy 1 km đến điểm quay đầu rồi quay lại điểm xuất phát để bàn giao cho đồng
             đội — mỗi người chạy 2 km, 5 người tiếp sức tổng 10 km.
@@ -351,7 +351,7 @@ export function Home() {
           <h2 className="text-center text-xs font-bold uppercase tracking-[0.2em] text-geoenv-600">
             Giới thiệu giải chạy
           </h2>
-          <p className="mx-auto mt-5 max-w-2xl px-4 text-center text-pretty text-sm leading-relaxed text-slate-700 sm:text-base">
+          <p className="mx-auto mt-5 max-w-2xl px-4 text-justify text-pretty text-sm leading-relaxed text-slate-700 sm:text-base">
             GEOENV RUN Season 2 – “Bước chân Địa chất &amp; Môi trường” là sân chơi thể thao
             lành mạnh nhằm thúc đẩy phong trào rèn luyện sức khỏe, tăng cường giao lưu, kết
             nối giữa cán bộ, giảng viên và sinh viên hai Khoa Địa chất – Môi trường nói
@@ -363,7 +363,7 @@ export function Home() {
           </p>
 
           {/* Đoạn ý nghĩa 60 năm — chỉ dùng sự kiện đã xác thực, không thêm lời phát biểu */}
-          <p className="mx-auto mt-5 max-w-2xl px-4 text-center text-pretty text-sm leading-relaxed text-slate-700 sm:text-base">
+          <p className="mx-auto mt-5 max-w-2xl px-4 text-justify text-pretty text-sm leading-relaxed text-slate-700 sm:text-base">
             Giải chạy năm nay mang ý nghĩa đặc biệt khi diễn ra trong dịp kỷ niệm
             60&nbsp;năm thành lập Trường Đại học Mỏ&nbsp;–&nbsp;Địa&nbsp;chất
             (1966&nbsp;–&nbsp;2026), đồng thời chào đón các bạn tân sinh viên K71 — thế hệ tiếp
