@@ -27,7 +27,7 @@ const EVENT = {
   name: 'GEOENV RUN 2026',
   tagline: 'Bước chân Địa chất – Môi trường',
   intro:
-    'Giải chạy tiếp sức Ekiden 10KM do Liên chi Đoàn Khoa Khoa học và Kỹ thuật Địa chất phối hợp Liên chi Đoàn Khoa Môi trường tổ chức — hướng tới kỷ niệm 60 năm thành lập Trường Đại học Mỏ – Địa chất và chào đón tân sinh viên K71. Tra cứu giấy chứng nhận và xem album ảnh ngay tại website này.',
+    'Giải chạy tiếp sức Ekiden 10KM do Liên chi Đoàn Khoa Khoa học và Kỹ thuật Địa chất phối hợp Liên chi Đoàn Khoa Môi trường tổ chức — hướng tới kỷ niệm 60 năm thành lập Trường Đại học Mỏ – Địa chất và chào đón tân sinh viên K71.',
   dateText: 'Chủ nhật, 25/10/2026',
   placeText: 'Trường Đại học Mỏ – Địa chất',
   placeDetail:
