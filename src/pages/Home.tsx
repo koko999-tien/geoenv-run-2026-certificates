@@ -332,10 +332,10 @@ export function Home() {
 
           {/* Đoạn ý nghĩa 60 năm — chỉ dùng sự kiện đã xác thực, không thêm lời phát biểu */}
           <p className="mx-auto mt-5 max-w-2xl px-4 text-center text-pretty text-sm leading-relaxed text-slate-700 sm:text-base">
-            Giải chạy năm nay mang ý nghĩa đặc biệt khi diễn ra trong năm kỷ niệm 60 năm
-            thành&nbsp;lập Trường Đại học Mỏ&nbsp;–&nbsp;Địa&nbsp;chất (1966 – 2026), đồng thời chào đón
-            tân&nbsp;sinh&nbsp;viên K71 — thế hệ sinh viên mới tiếp bước truyền thống 60 năm của Nhà
-            trường.
+            Giải chạy năm nay mang ý nghĩa đặc biệt khi diễn ra trong dịp kỷ niệm
+            60&nbsp;năm thành lập Trường Đại học Mỏ&nbsp;–&nbsp;Địa&nbsp;chất
+            (1966&nbsp;–&nbsp;2026), đồng thời chào đón các bạn tân sinh viên K71 — thế hệ tiếp
+            bước truyền thống vẻ vang của Nhà&nbsp;trường.
           </p>
 
           <h3 className="mt-12 text-center text-2xl font-bold text-slate-900">
