@@ -320,7 +320,7 @@ export function CertificateLookup() {
 
   const notFoundTips = [
     'Gõ tên không cần dấu cũng được (ví dụ: "nguyen van a").',
-    'Lớp có thể gõ tên đầy đủ hoặc viết tắt đều được (ví dụ: "Quản lý tài nguyên môi trường K71A" hay "QLTNMT K71A").',
+    'Lớp nên gõ tên đầy đủ (ví dụ: "Quản lý tài nguyên và môi trường K71A").',
     'Nhập đúng họ tên đầy đủ như khi đăng ký (có chữ đệm).',
     'Vẫn không thấy? Liên hệ BTC qua thông tin ở cuối trang nhé.',
   ];
@@ -344,8 +344,8 @@ export function CertificateLookup() {
         </h1>
         <p className="mx-auto mt-2 max-w-md text-sm leading-relaxed text-slate-600">
           Nhập <strong className="text-slate-900">họ tên</strong> để tìm và tải giấy chứng nhận
-          tham gia GEOENV RUN 2026. Lớp có thể gõ tên đầy đủ hoặc viết tắt đều được, bỏ trống
-          cũng được.
+          tham gia GEOENV RUN 2026. Nên gõ tên lớp đầy đủ, ví dụ: Quản lý tài nguyên và môi
+          trường K71A. Bỏ trống ô lớp cũng được.
         </p>
       </div>
 
@@ -382,7 +382,7 @@ export function CertificateLookup() {
               type="text"
               className="input-field"
               // ✏️ Sửa ví dụ gợi ý tại đây
-              placeholder="Du lịch địa chất K68 hoặc QLTNMT K71A"
+              placeholder="Quản lý tài nguyên và môi trường K71A"
               value={form.className}
               onChange={(e) => setForm({ ...form, className: e.target.value })}
               autoComplete="off"
