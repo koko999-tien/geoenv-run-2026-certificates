@@ -211,6 +211,12 @@ export function AdminCertificates() {
   const [lockReason, setLockReason] = useState('');
   const [locking, setLocking] = useState(false);
   const [needsReasonColumn, setNeedsReasonColumn] = useState(false);
+  /* Hộp xác nhận trong web (thay hộp mặc định của trình duyệt): bấm Mở khóa
+     hoặc Xóa ở bảng chỉ mở hộp này, bấm xác nhận lần nữa mới thực hiện */
+  const [confirmAction, setConfirmAction] = useState<{
+    type: 'unlock' | 'delete';
+    row: CertificateRow;
+  } | null>(null);
   const lockBoxRef = useRef<HTMLDivElement>(null);
 
   /* Bảng có 402 dòng nên hộp khóa nằm tít cuối trang — bấm nút là tự cuộn tới hộp,
@@ -282,7 +288,6 @@ export function AdminCertificates() {
 
   /* Mở khóa — trả lại quyền tải cho vận động viên */
   const handleUnlock = async (record: CertificateRow) => {
-    if (!window.confirm(`Mở khóa chứng nhận cho ${record.full_name}?`)) return;
     setLoading(true);
     try {
       const { error } = await supabase
@@ -307,7 +312,6 @@ export function AdminCertificates() {
   };
 
   const handleDelete = async (id: string) => {
-    if (!window.confirm('Bạn có chắc muốn xóa bản ghi này?')) return;
     setLoading(true);
     try {
       const { error } = await supabase
@@ -614,14 +618,14 @@ export function AdminCertificates() {
                           </button>
                         ) : (
                           <button
-                            onClick={() => handleUnlock(row)}
+                            onClick={() => setConfirmAction({ type: 'unlock', row })}
                             className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium text-emerald-700 ring-1 ring-emerald-200 transition-colors hover:bg-emerald-50"
                           >
                             <LockOpen className="h-3.5 w-3.5" /> Mở khóa
                           </button>
                         )}
                         <button
-                          onClick={() => handleDelete(row.id)}
+                          onClick={() => setConfirmAction({ type: 'delete', row })}
                           className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium text-red-600 ring-1 ring-red-200 transition-colors hover:bg-red-50"
                         >
                           <Trash2 className="h-3.5 w-3.5" /> Xóa
@@ -728,6 +732,53 @@ export function AdminCertificates() {
             >
               Hủy
             </Button>
+          </div>
+        </div>
+      )}
+
+      {/* Hộp xác nhận mở khóa / xóa — toàn tiếng Việt, không dùng hộp trình duyệt */}
+      {confirmAction && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
+          <div className="card w-full max-w-sm p-6">
+            <h3 className="text-lg font-bold text-slate-900">
+              {confirmAction.type === 'unlock' ? 'Mở khóa chứng nhận?' : 'Xóa bản ghi?'}
+            </h3>
+            <p className="mt-2 text-sm leading-relaxed text-slate-600">
+              {confirmAction.row.full_name} • Lớp {confirmAction.row.class_name}
+            </p>
+            <p className="mt-1 text-sm text-slate-600">
+              {confirmAction.type === 'unlock'
+                ? 'Vận động viên này sẽ tải lại được giấy chứng nhận.'
+                : 'Bản ghi sẽ bị xóa khỏi hệ thống và không khôi phục được.'}
+            </p>
+            <div className="mt-5 flex flex-wrap gap-3">
+              {confirmAction.type === 'unlock' ? (
+                <Button
+                  variant="primary"
+                  onClick={() => {
+                    const row = confirmAction.row;
+                    setConfirmAction(null);
+                    void handleUnlock(row);
+                  }}
+                >
+                  Mở khóa
+                </Button>
+              ) : (
+                <button
+                  onClick={() => {
+                    const id = confirmAction.row.id;
+                    setConfirmAction(null);
+                    void handleDelete(id);
+                  }}
+                  className="inline-flex items-center justify-center gap-2 rounded-xl bg-red-600 px-6 py-3 text-sm font-semibold text-white transition-all hover:bg-red-700"
+                >
+                  Xóa
+                </button>
+              )}
+              <Button variant="outline" onClick={() => setConfirmAction(null)}>
+                Hủy
+              </Button>
+            </div>
           </div>
         </div>
       )}
