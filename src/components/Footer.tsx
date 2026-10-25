@@ -9,7 +9,7 @@ export function Footer() {
           <div>
             <div className="flex items-center gap-2.5">
               <img
-                src="/favicon.png"
+                src="/favicon.svg"
                 alt="Logo GEOENV RUN 2026"
                 className="h-10 w-10 rounded-full ring-2 ring-geoenv-800"
               />

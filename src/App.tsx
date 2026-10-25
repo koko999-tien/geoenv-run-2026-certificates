@@ -1,19 +1,39 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, lazy, Suspense } from 'react';
 import { supabase } from './lib/supabase';
 import { BrowserRouter, Routes, Route, Navigate, useLocation } from 'react-router-dom';
 import { Layout } from './components/Layout';
 import { AdminLayout } from './components/AdminLayout';
-import { Home } from './pages/Home';
-import { CertificateLookup } from './pages/CertificateLookup';
-import { Feedback } from './pages/Feedback';
-import { SubmitResult } from './pages/SubmitResult';
-import { ChillGame } from './pages/ChillGame';
-import { AdminFeedback } from './pages/AdminFeedback';
-import { AdminResults } from './pages/AdminResults';
-import { AdminLogin } from './pages/AdminLogin';
-import { AdminDashboard } from './pages/AdminDashboard';
-import { AdminCertificates } from './pages/AdminCertificates';
 import { VisitTracker } from './components/VisitTracker';
+
+/* Tách code theo trang (lazy): khách vào trang chủ chỉ tải code trang chủ,
+   không phải tải cả code quản trị (kể cả thư viện Excel nặng) và các trang
+   khác — trang nhẹ hơn, mở nhanh hơn, cuộn mượt hơn. Mỗi trang chỉ tải khi
+   người dùng bấm vào. Các trang dùng export tên riêng nên cần map sang default
+   cho lazy(). */
+const Home = lazy(() => import('./pages/Home').then((m) => ({ default: m.Home })));
+const CertificateLookup = lazy(() =>
+  import('./pages/CertificateLookup').then((m) => ({ default: m.CertificateLookup })),
+);
+const Feedback = lazy(() => import('./pages/Feedback').then((m) => ({ default: m.Feedback })));
+const SubmitResult = lazy(() =>
+  import('./pages/SubmitResult').then((m) => ({ default: m.SubmitResult })),
+);
+const ChillGame = lazy(() => import('./pages/ChillGame').then((m) => ({ default: m.ChillGame })));
+const AdminFeedback = lazy(() =>
+  import('./pages/AdminFeedback').then((m) => ({ default: m.AdminFeedback })),
+);
+const AdminResults = lazy(() =>
+  import('./pages/AdminResults').then((m) => ({ default: m.AdminResults })),
+);
+const AdminLogin = lazy(() =>
+  import('./pages/AdminLogin').then((m) => ({ default: m.AdminLogin })),
+);
+const AdminDashboard = lazy(() =>
+  import('./pages/AdminDashboard').then((m) => ({ default: m.AdminDashboard })),
+);
+const AdminCertificates = lazy(() =>
+  import('./pages/AdminCertificates').then((m) => ({ default: m.AdminCertificates })),
+);
 
 /* Web này là trang đơn (không tải lại trang khi chuyển mục) nên trình duyệt giữ
    nguyên vị trí cuộn sang trang mới — đang ở cuối trang chủ mà bấm sang trang
@@ -58,6 +78,13 @@ const App = () => {
     <BrowserRouter>
       <ScrollToTop />
       <VisitTracker />
+      <Suspense
+        fallback={
+          <div className="mx-auto max-w-6xl px-4 py-16 text-center text-sm text-slate-500">
+            Đang tải trang…
+          </div>
+        }
+      >
       <Routes>
         <Route element={<Layout />}>
           <Route path="/" element={<Home />} />
@@ -85,6 +112,7 @@ const App = () => {
 
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
+      </Suspense>
     </BrowserRouter>
   );
 };

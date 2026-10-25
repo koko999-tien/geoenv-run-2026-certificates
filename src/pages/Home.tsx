@@ -177,6 +177,7 @@ export function Home() {
           alt=""
           aria-hidden
           fetchPriority="high"
+          decoding="async"
           className="hero-img absolute inset-0 -z-20 h-full w-full object-cover"
         />
         {/* Lớp phủ tối mờ để chữ trắng nổi bật (chuẩn chiến dịch truyền thông) */}
