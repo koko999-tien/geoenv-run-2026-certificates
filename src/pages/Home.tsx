@@ -362,6 +362,35 @@ export function Home() {
               </div>
             ))}
           </div>
+
+          {/* Giải cá nhân — VĐV nam/nữ xuất sắc nhất */}
+          <p className="mt-10 text-center text-xs font-bold uppercase tracking-[0.2em] text-geoenv-600">
+            Giải cá nhân
+          </p>
+          <div className="mx-auto mt-5 grid max-w-3xl grid-cols-1 gap-4 sm:grid-cols-2">
+            <div className="card p-5 text-center sm:p-6">
+              <span className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-blue-100">
+                <Medal className="h-6 w-6 text-blue-600" />
+              </span>
+              <p className="mt-3 text-xs font-bold uppercase tracking-wider text-blue-600">
+                VĐV nam xuất sắc nhất
+              </p>
+              <p className="mt-2 text-base font-extrabold text-geoenv-700">300.000đ</p>
+            </div>
+            <div className="card p-5 text-center sm:p-6">
+              <span className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-rose-100">
+                <Medal className="h-6 w-6 text-rose-600" />
+              </span>
+              <p className="mt-3 text-xs font-bold uppercase tracking-wider text-rose-600">
+                VĐV nữ xuất sắc nhất
+              </p>
+              <h3 className="mt-1 text-lg font-bold leading-snug text-slate-900">
+                Ngô Phương Chiển
+              </h3>
+              <p className="text-sm text-slate-500">Đội 48</p>
+              <p className="mt-2 text-base font-extrabold text-geoenv-700">300.000đ</p>
+            </div>
+          </div>
         </div>
       </section>
 
