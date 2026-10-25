@@ -17,7 +17,6 @@ import {
   Sparkles,
   Trophy,
   Users,
-  ZoomIn,
 } from 'lucide-react';
 
 /* ============================================================
@@ -325,34 +324,6 @@ export function Home() {
               {EVENT.placeDetail}
             </p>
           </div>
-        </div>
-      </section>
-
-      {/* ================= SƠ ĐỒ ĐƯỜNG CHẠY ================= */}
-      <section className="bg-slate-50 py-14 sm:py-16">
-        <div className="mx-auto max-w-5xl px-4 sm:px-6 lg:max-w-7xl lg:px-8">
-          <h2 className="text-center text-xs font-bold uppercase tracking-[0.2em] text-geoenv-600">
-            Sơ đồ đường chạy
-          </h2>
-          <p className="mx-auto mt-5 max-w-2xl px-4 text-justify text-pretty text-sm leading-relaxed text-slate-700 sm:text-base">
-            Đường chạy đi-về trên cùng một đoạn đường: xuất phát tại P. Nguyễn Đình Tứ,
-            chạy 1 km đến điểm quay đầu rồi quay lại điểm xuất phát để bàn giao cho đồng
-            đội — mỗi người chạy 2 km, 5 người tiếp sức tổng 10 km.
-          </p>
-          <div className="card mx-auto mt-7 max-w-4xl overflow-hidden">
-            <a href="/so-do-duong-chay.webp" target="_blank" rel="noreferrer">
-              <img
-                src="/so-do-duong-chay.webp"
-                alt="Sơ đồ đường chạy GEOENV RUN 2026: xuất phát tại P. Nguyễn Đình Tứ, chạy 1 km đến điểm quay đầu rồi quay lại điểm xuất phát để bàn giao; mỗi người chạy 2 km, 5 người tiếp sức tổng 10 km."
-                loading="lazy"
-                className="h-auto w-full"
-              />
-            </a>
-          </div>
-          <p className="mt-4 flex items-center justify-center gap-1.5 text-center text-xs text-slate-500 sm:text-sm">
-            <ZoomIn className="h-4 w-4 text-geoenv-500" />
-            Nhấn vào ảnh để xem kích thước đầy đủ.
-          </p>
         </div>
       </section>
 
