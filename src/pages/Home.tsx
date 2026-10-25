@@ -291,6 +291,80 @@ export function Home() {
         </div>
       </section>
 
+      {/* ================= KẾT QUẢ CHUNG CUỘC — các đội đoạt giải lên trang nhất ================= */}
+      <section className="bg-slate-50 py-14 sm:py-16">
+        <div className="mx-auto max-w-5xl px-4 sm:px-6 lg:max-w-7xl lg:px-8">
+          <h2 className="text-center text-xs font-bold uppercase tracking-[0.2em] text-geoenv-600">
+            Kết quả chung cuộc
+          </h2>
+          <p className="mx-auto mt-5 max-w-2xl px-4 text-center text-sm leading-relaxed text-slate-700 sm:text-base">
+            GEOENV RUN SEASON 2 • 25/10/2026 — xin chúc mừng các đội đoạt giải!
+          </p>
+          <div className="mx-auto mt-8 grid max-w-5xl grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+            {[
+              {
+                icon: Trophy,
+                iconBg: 'bg-amber-100',
+                iconColor: 'text-amber-600',
+                labelColor: 'text-amber-600',
+                place: 'Giải Nhất',
+                team: 'SIÊU LỐP',
+                teamNo: 'Đội 06',
+                prize: '1.500.000đ',
+              },
+              {
+                icon: Medal,
+                iconBg: 'bg-slate-100',
+                iconColor: 'text-slate-500',
+                labelColor: 'text-slate-500',
+                place: 'Giải Nhì',
+                team: 'Pò Fēng Zhě',
+                teamNo: 'Đội 30',
+                prize: '1.000.000đ',
+              },
+              {
+                icon: Medal,
+                iconBg: 'bg-orange-100',
+                iconColor: 'text-orange-700',
+                labelColor: 'text-orange-700',
+                place: 'Giải Ba',
+                team: 'Humg Basketball Club - HBC',
+                teamNo: 'Đội 48',
+                prize: '500.000đ',
+              },
+              {
+                icon: Heart,
+                iconBg: 'bg-emerald-100',
+                iconColor: 'text-emerald-600',
+                labelColor: 'text-emerald-600',
+                place: 'Đội kiên cường nhất',
+                team: 'Gà Bay Vịt Chạy',
+                teamNo: 'Đội 24',
+                prize: 'Giải tinh thần',
+                note: 'Chạy lâu nhất mà không bỏ cuộc',
+              },
+            ].map((r) => (
+              <div key={r.place} className="card p-5 text-center sm:p-6">
+                <span
+                  className={`mx-auto flex h-12 w-12 items-center justify-center rounded-full ${r.iconBg}`}
+                >
+                  <r.icon className={`h-6 w-6 ${r.iconColor}`} />
+                </span>
+                <p className={`mt-3 text-xs font-bold uppercase tracking-wider ${r.labelColor}`}>
+                  {r.place}
+                </p>
+                <h3 className="mt-1 text-lg font-bold leading-snug text-slate-900">{r.team}</h3>
+                <p className="text-sm text-slate-500">{r.teamNo}</p>
+                <p className="mt-2 text-base font-extrabold text-geoenv-700">{r.prize}</p>
+                {'note' in r && r.note ? (
+                  <p className="mt-1 text-xs leading-relaxed text-slate-500">{r.note}</p>
+                ) : null}
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
       {/* ================= THÔNG TIN SỰ KIỆN (thẻ trắng trên nền sáng) ================= */}
       <section className="py-14 sm:py-16">
         <div className="mx-auto max-w-5xl px-4 sm:px-6 lg:max-w-7xl lg:px-8">
