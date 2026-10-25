@@ -27,18 +27,18 @@ const QUESTIONS: Question[] = [
     answer: 1,
   },
   {
-    q: 'Tổng cự ly cả đội phải chạy là bao nhiêu?',
-    options: ['5km', '10km', '20km', '42km'],
-    answer: 1,
-  },
-  {
-    q: 'Giải chạy diễn ra vào ngày nào?',
-    options: ['02/11/2025', '25/10/2026', '28/10/2026', '25/10/2025'],
-    answer: 1,
-  },
-  {
     q: 'Đội nào đoạt giải Nhất chung cuộc?',
     options: ['Pò Fēng Zhě', 'Humg Basketball Club - HBC', 'SIÊU LỐP', 'Gà Bay Vịt Chạy'],
+    answer: 2,
+  },
+  {
+    q: 'Đội nào đoạt giải Nhì chung cuộc?',
+    options: ['SIÊU LỐP', 'Pò Fēng Zhě', 'Humg Basketball Club - HBC', 'SKIN WALKER'],
+    answer: 1,
+  },
+  {
+    q: 'Đội nào đoạt giải Ba chung cuộc?',
+    options: ['SIÊU LỐP', 'Pò Fēng Zhě', 'Humg Basketball Club - HBC', 'Gà Bay Vịt Chạy'],
     answer: 2,
   },
   {
@@ -57,26 +57,56 @@ const QUESTIONS: Question[] = [
     answer: 2,
   },
   {
-    q: 'Mỗi đội bắt buộc phải có ít nhất bao nhiêu nữ VĐV?',
-    options: ['Không bắt buộc', 'Ít nhất 1 nữ', 'Ít nhất 2 nữ', 'Ít nhất 3 nữ'],
+    q: 'Đội SIÊU LỐP mang số báo danh đội là bao nhiêu?',
+    options: ['Đội 60', 'Đội 06', 'Đội 10', 'Đội 24'],
     answer: 1,
   },
   {
-    q: 'Giải chạy tổ chức ở đâu?',
+    q: "Đội 'Gà Bay Vịt Chạy' mang số báo danh đội là bao nhiêu?",
+    options: ['Đội 06', 'Đội 30', 'Đội 24', 'Đội 48'],
+    answer: 2,
+  },
+  {
+    q: 'Tiền thưởng của giải Nhất đồng đội là bao nhiêu?',
+    options: ['500.000đ', '1.000.000đ', '1.500.000đ', '3.000.000đ'],
+    answer: 2,
+  },
+  {
+    q: "Cuộc thi 'Khoảnh khắc ấn tượng' tính điểm như thế nào?",
     options: [
-      'Sân vận động Mỹ Đình',
-      'Trường Đại học Mỏ – Địa chất',
-      'Công viên Thống Nhất',
-      'Hồ Hoàn Kiếm',
+      'Chia sẻ kèm hashtag 3 điểm, reaction 1 điểm',
+      'Chia sẻ 1 điểm, reaction 3 điểm',
+      'Mỗi tương tác 2 điểm',
+      'Chỉ tính lượt chia sẻ',
     ],
+    answer: 0,
+  },
+  {
+    q: "Hạn cuối gửi ảnh dự thi 'Khoảnh khắc ấn tượng' là khi nào?",
+    options: [
+      'Trước 20h 25/10/2026',
+      'Trước 20h 27/10/2026',
+      'Trước 20h 28/10/2026',
+      'Trước 20h 30/10/2026',
+    ],
+    answer: 1,
+  },
+  {
+    q: 'Giải chạy hướng tới kỷ niệm bao nhiêu năm thành lập Trường ĐH Mỏ – Địa chất?',
+    options: ['50 năm', '55 năm', '60 năm', '65 năm'],
+    answer: 2,
+  },
+  {
+    q: 'Giấy chứng nhận được làm cho bao nhiêu VĐV? (không tính các đội khách mời)',
+    options: ['425 VĐV', '405 VĐV', '400 VĐV', '415 VĐV'],
     answer: 1,
   },
 ];
 
 function resultMessage(score: number) {
   if (score === QUESTIONS.length) return 'Quá đỉnh! Bạn là fan cứng của GEOENV RUN rồi!';
-  if (score >= 7) return 'Giỏi quá! Bạn nhớ giải chạy rất rõ.';
-  if (score >= 4) return 'Khá ổn! Chơi lại một ván để lên điểm nhé.';
+  if (score >= 12) return 'Giỏi quá! Bạn nhớ giải chạy rất rõ.';
+  if (score >= 8) return 'Khá ổn! Chơi lại một ván để lên điểm nhé.';
   return 'Mới làm quen với giải chạy thôi, chơi lại nào!';
 }
 
@@ -149,8 +179,8 @@ export function ChillGame() {
         </span>
         <h1 className="mt-4 text-2xl font-bold text-slate-900 sm:text-3xl">Góc chill — Mini game</h1>
         <p className="mt-2 text-sm leading-relaxed text-slate-600 sm:text-base">
-          Bạn hiểu GEOENV RUN đến đâu? Trả lời 10 câu hỏi vui, không tính giờ, sai cũng không
-          sao.
+          Bạn hiểu GEOENV RUN đến đâu? Trả lời 15 câu hỏi, có vài câu hóc búa đấy — không
+          tính giờ, sai cũng không sao.
         </p>
       </div>
 
