@@ -30,15 +30,22 @@ export function getVnToday(): string {
   return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Ho_Chi_Minh' }).format(new Date());
 }
 
+/* Ghi lượt xem — dùng INSERT thường, KHÔNG dùng upsert:
+   upsert (INSERT ... ON CONFLICT) bị luật bảo mật dòng (RLS) chặn với tài
+   khoản khách, vì nó đòi thêm quyền đọc bảng mới kiểm tra được trùng lặp —
+   mà cấp quyền đọc cho khách thì lộ số liệu. INSERT thường chỉ cần quyền
+   ghi nên chạy được; tải lại trang cùng ngày bị trùng khóa duy nhất thì
+   lỗi được nuốt im lặng bên dưới, số liệu không sai. */
 export async function recordVisit(path: string): Promise<void> {
   try {
     if (path.startsWith('/quan-tri')) return;
     const { data } = await supabase.auth.getSession();
     if (data.session) return; // quản trị viên không tính vào số chung
-    await supabase.from('site_visits').upsert(
-      { visitor_id: getVisitorId(), path, visited_date: getVnToday() },
-      { onConflict: 'visitor_id,path,visited_date', ignoreDuplicates: true },
-    );
+    await supabase.from('site_visits').insert({
+      visitor_id: getVisitorId(),
+      path,
+      visited_date: getVnToday(),
+    });
   } catch {
     /* Im lặng: đếm là tính năng phụ, không được làm phiền người xem */
   }
