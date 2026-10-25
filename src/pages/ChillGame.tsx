@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { Gamepad2, ArrowRight, RotateCcw, Trophy, Check, X } from 'lucide-react';
 
@@ -110,6 +110,44 @@ function resultMessage(score: number) {
   return 'Mới làm quen với giải chạy thôi, chơi lại nào!';
 }
 
+/* Pháo giấy tung khi đạt điểm cao (từ 12/15 trở lên) — toàn CSS, không cần thư viện */
+const CONFETTI_COLORS = ['#1e5fc4', '#10b981', '#f59e0b', '#ec4899', '#8b5cf6', '#06b6d4'];
+
+function Confetti() {
+  const pieces = useMemo(
+    () =>
+      Array.from({ length: 80 }, (_, i) => ({
+        id: i,
+        left: Math.random() * 100,
+        delay: Math.random() * 0.8,
+        duration: 2.6 + Math.random() * 2.2,
+        size: 6 + Math.random() * 8,
+        color: CONFETTI_COLORS[i % CONFETTI_COLORS.length],
+        round: Math.random() > 0.5,
+      })),
+    [],
+  );
+  return (
+    <div aria-hidden className="pointer-events-none fixed inset-0 z-50 overflow-hidden">
+      {pieces.map((p) => (
+        <span
+          key={p.id}
+          className="confetti-piece"
+          style={{
+            left: `${p.left}%`,
+            width: p.size,
+            height: p.round ? p.size : p.size * 0.5,
+            backgroundColor: p.color,
+            borderRadius: p.round ? '50%' : '2px',
+            animationDuration: `${p.duration}s`,
+            animationDelay: `${p.delay}s`,
+          }}
+        />
+      ))}
+    </div>
+  );
+}
+
 export function ChillGame() {
   const [index, setIndex] = useState(0);
   const [selected, setSelected] = useState<number | null>(null);
@@ -144,6 +182,7 @@ export function ChillGame() {
   if (finished) {
     return (
       <div className="mx-auto max-w-2xl px-4 py-10 text-center sm:px-6">
+        {score >= 12 && <Confetti />}
         <span className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-amber-100">
           <Trophy className="h-7 w-7 text-amber-600" />
         </span>

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   ArrowRight,
@@ -86,8 +86,72 @@ function useCountdown(target: string, endTarget?: string) {
   };
 }
 
+/* Số liệu nhảy từ 0 lên đúng số khi cuộn tới — người bật "giảm chuyển động" thấy số cuối ngay */
+function CountUp({ end, suffix }: { end: number; suffix: string }) {
+  const ref = useRef<HTMLSpanElement>(null);
+  const [value, setValue] = useState(0);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      setValue(end);
+      return;
+    }
+    let raf = 0;
+    const obs = new IntersectionObserver(
+      ([entry]) => {
+        if (!entry.isIntersecting) return;
+        obs.disconnect();
+        const duration = 1400;
+        const start = performance.now();
+        const tick = (now: number) => {
+          const t = Math.min((now - start) / duration, 1);
+          const eased = 1 - Math.pow(1 - t, 3);
+          setValue(Math.round(eased * end));
+          if (t < 1) raf = requestAnimationFrame(tick);
+        };
+        raf = requestAnimationFrame(tick);
+      },
+      { threshold: 0.4 },
+    );
+    obs.observe(el);
+    return () => {
+      obs.disconnect();
+      cancelAnimationFrame(raf);
+    };
+  }, [end]);
+
+  return (
+    <span ref={ref}>
+      {value}
+      {suffix}
+    </span>
+  );
+}
+
 export function Home() {
   const { days, hours, minutes, seconds, isStarted, isEnded } = useCountdown(EVENT.startAt, EVENT.endAt);
+
+  /* Hiệu ứng cuộn hiện dần: các mục có class reveal-on-scroll sẽ mờ dần thành rõ
+     khi cuộn tới. Mỗi mục chỉ hiện 1 lần. */
+  useEffect(() => {
+    const sections = Array.from(document.querySelectorAll('.reveal-on-scroll'));
+    if (sections.length === 0) return;
+    const obs = new IntersectionObserver(
+      (entries) => {
+        entries.forEach((entry) => {
+          if (entry.isIntersecting) {
+            entry.target.classList.add('is-visible');
+            obs.unobserve(entry.target);
+          }
+        });
+      },
+      { threshold: 0.12 },
+    );
+    sections.forEach((s) => obs.observe(s));
+    return () => obs.disconnect();
+  }, []);
   const pad = (n: number) => String(n).padStart(2, '0');
 
   const countdownCells = [
@@ -113,7 +177,7 @@ export function Home() {
           alt=""
           aria-hidden
           fetchPriority="high"
-          className="absolute inset-0 -z-20 h-full w-full object-cover"
+          className="hero-img absolute inset-0 -z-20 h-full w-full object-cover"
         />
         {/* Lớp phủ tối mờ để chữ trắng nổi bật (chuẩn chiến dịch truyền thông) */}
         <div className="absolute inset-0 -z-10 bg-gradient-to-br from-geoenv-950/90 via-geoenv-900/75 to-emerald-900/60" />
@@ -207,7 +271,7 @@ export function Home() {
       </section>
 
       {/* ================= CHỨC NĂNG CHÍNH — ngay dưới banner, chạm 1 cái là tới ================= */}
-      <section className="py-10 sm:py-12">
+      <section className="reveal-on-scroll py-10 sm:py-12">
         <div className="mx-auto max-w-5xl px-4 sm:px-6 lg:max-w-7xl lg:px-8">
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
             {/* Ô 1: Tra cứu giấy chứng nhận — chức năng quan trọng nhất, luôn ở đầu trang */}
@@ -266,19 +330,19 @@ export function Home() {
       </section>
 
       {/* ================= 3 CHỈ SỐ GIẢI ĐẤU ================= */}
-      <section className="bg-gradient-to-r from-geoenv-800 via-geoenv-700 to-geoenv-800 py-8 sm:py-10 lg:py-16">
+      <section className="reveal-on-scroll bg-gradient-to-r from-geoenv-800 via-geoenv-700 to-geoenv-800 py-8 sm:py-10 lg:py-16">
         <div className="mx-auto max-w-5xl px-4 sm:px-6 lg:max-w-7xl lg:px-8">
           {/* Đúng 3 chỉ số kỹ thuật của giải — đối xứng 3 cột trên mọi màn hình */}
           <div className="mx-auto grid max-w-3xl grid-cols-3 gap-4 sm:gap-6">
             {[
-              { icon: Flag, value: '85', label: 'Đội thi đấu' },
-              { icon: Users, value: '425', label: 'Vận động viên' },
-              { icon: Route, value: '10 KM', label: 'Cự ly tiếp sức Ekiden' },
+              { icon: Flag, end: 85, suffix: '', label: 'Đội thi đấu' },
+              { icon: Users, end: 425, suffix: '', label: 'Vận động viên' },
+              { icon: Route, end: 10, suffix: ' KM', label: 'Cự ly tiếp sức Ekiden' },
             ].map((stat) => (
               <div key={stat.label} className="text-center">
                 <stat.icon className="mx-auto h-5 w-5 text-geoenv-200" />
                 <p className="mt-2 text-2xl font-extrabold tracking-tight text-white sm:text-3xl lg:text-5xl lg:font-black">
-                  {stat.value}
+                  <CountUp end={stat.end} suffix={stat.suffix} />
                 </p>
                 <p className="mt-0.5 text-[11px] font-medium normal-case leading-snug tracking-normal text-geoenv-200 sm:text-sm">
                   {stat.label}
@@ -290,7 +354,7 @@ export function Home() {
       </section>
 
       {/* ================= KẾT QUẢ CHUNG CUỘC — các đội đoạt giải lên trang nhất ================= */}
-      <section className="bg-slate-50 py-14 sm:py-16">
+      <section className="reveal-on-scroll bg-slate-50 py-14 sm:py-16">
         <div className="mx-auto max-w-5xl px-4 sm:px-6 lg:max-w-7xl lg:px-8">
           <h2 className="text-center text-xs font-bold uppercase tracking-[0.2em] text-geoenv-600">
             Kết quả chung cuộc
@@ -342,7 +406,7 @@ export function Home() {
                 note: 'Chạy lâu nhất mà không bỏ cuộc',
               },
             ].map((r) => (
-              <div key={r.place} className="card p-5 text-center sm:p-6">
+              <div key={r.place} className="card p-5 text-center transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg sm:p-6">
                 <span
                   className={`mx-auto flex h-12 w-12 items-center justify-center rounded-full ${r.iconBg}`}
                 >
@@ -366,7 +430,7 @@ export function Home() {
             Giải cá nhân
           </p>
           <div className="mx-auto mt-5 grid max-w-3xl grid-cols-1 gap-4 sm:grid-cols-2">
-            <div className="card p-5 text-center sm:p-6">
+            <div className="card p-5 text-center transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg sm:p-6">
               <span className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-blue-100">
                 <Medal className="h-6 w-6 text-blue-600" />
               </span>
@@ -379,7 +443,7 @@ export function Home() {
               <p className="text-sm text-slate-500">Đội 06</p>
               <p className="mt-2 text-base font-extrabold text-geoenv-700">300.000đ</p>
             </div>
-            <div className="card p-5 text-center sm:p-6">
+            <div className="card p-5 text-center transition-all duration-200 hover:-translate-y-0.5 hover:shadow-lg sm:p-6">
               <span className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-rose-100">
                 <Medal className="h-6 w-6 text-rose-600" />
               </span>
@@ -397,7 +461,7 @@ export function Home() {
       </section>
 
       {/* ================= THÔNG TIN SỰ KIỆN (thẻ trắng trên nền sáng) ================= */}
-      <section className="py-14 sm:py-16">
+      <section className="reveal-on-scroll py-14 sm:py-16">
         <div className="mx-auto max-w-5xl px-4 sm:px-6 lg:max-w-7xl lg:px-8">
           <h2 className="text-center text-xs font-bold uppercase tracking-[0.2em] text-geoenv-600">
             Thông tin sự kiện
@@ -433,7 +497,7 @@ export function Home() {
       </section>
 
       {/* ================= GIỚI THIỆU & THỂ THỨC THI ĐẤU ================= */}
-      <section className="bg-white py-14 sm:py-16">
+      <section className="reveal-on-scroll bg-white py-14 sm:py-16">
         <div className="mx-auto max-w-5xl px-4 sm:px-6 lg:max-w-7xl lg:px-8">
           <h2 className="text-center text-xs font-bold uppercase tracking-[0.2em] text-geoenv-600">
             Giới thiệu giải chạy
@@ -511,7 +575,7 @@ export function Home() {
       </section>
 
       {/* ================= GIẢI THƯỞNG ================= */}
-      <section className="py-14 sm:py-16">
+      <section className="reveal-on-scroll py-14 sm:py-16">
         <div className="mx-auto max-w-5xl px-4 sm:px-6 lg:max-w-7xl lg:px-8">
           <h2 className="text-center text-xs font-bold uppercase tracking-[0.2em] text-geoenv-600">
             Cơ cấu giải thưởng
@@ -595,7 +659,7 @@ export function Home() {
       </section>
 
       {/* ================= CUỘC THI KHOẢNH KHẮC ẤN TƯỢNG ================= */}
-      <section className="bg-gradient-to-br from-geoenv-950 via-geoenv-900 to-emerald-900 py-14 sm:py-16">
+      <section className="reveal-on-scroll bg-gradient-to-br from-geoenv-950 via-geoenv-900 to-emerald-900 py-14 sm:py-16">
         <div className="mx-auto max-w-5xl px-4 sm:px-6 lg:max-w-7xl lg:px-8">
           <div className="text-center">
             <span className="inline-flex items-center gap-2 rounded-full border border-white/25 bg-white/10 px-4 py-1.5 text-xs font-semibold tracking-wide text-white backdrop-blur">

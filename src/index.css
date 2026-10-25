@@ -119,3 +119,62 @@
     animation-duration: 0.01ms !important;
   }
 }
+
+/* ===== Hiệu ứng chuyển động (thêm 2026-10-26) — toàn CSS, không tốn thêm tài nguyên ===== */
+/* Ảnh nền Hero zoom rất chậm, tạo cảm giác "ảnh đang thở" */
+.hero-img {
+  animation: hero-zoom 24s ease-in-out infinite alternate;
+  will-change: transform;
+}
+@keyframes hero-zoom {
+  from {
+    transform: scale(1);
+  }
+  to {
+    transform: scale(1.08);
+  }
+}
+
+/* Các mục cuộn tới đâu hiện dần tới đó (JS gắn class is-visible khi mục vào khung hình) */
+.reveal-on-scroll {
+  opacity: 0;
+  transform: translateY(24px);
+  transition: opacity 0.7s ease, transform 0.7s ease;
+}
+.reveal-on-scroll.is-visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+/* Mảnh pháo giấy rơi khi thắng game (mỗi mảnh tự đặt vị trí, màu, tốc độ bằng style inline) */
+.confetti-piece {
+  position: absolute;
+  top: -12px;
+  animation-name: confetti-fall;
+  animation-timing-function: linear;
+  animation-fill-mode: forwards;
+}
+@keyframes confetti-fall {
+  0% {
+    transform: translateY(0) rotate(0deg);
+    opacity: 1;
+  }
+  90% {
+    opacity: 1;
+  }
+  100% {
+    transform: translateY(105vh) rotate(720deg);
+    opacity: 0;
+  }
+}
+
+/* Người dùng bật "giảm chuyển động": hiện nội dung ngay, tắt hẳn zoom hero */
+@media (prefers-reduced-motion: reduce) {
+  .reveal-on-scroll {
+    opacity: 1 !important;
+    transform: none !important;
+  }
+  .hero-img {
+    animation: none !important;
+  }
+}
