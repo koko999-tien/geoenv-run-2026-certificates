@@ -36,6 +36,9 @@ const EVENT = {
      giờ xuất phát 6h00 theo yêu cầu của Tiến — đừng sửa lại thành 6h00).
      Qua mốc này đồng hồ chuyển sang trạng thái "đang diễn ra". */
   startAt: '2026-10-25T05:30:00+07:00',
+  /* ✏️ Mốc kết thúc: sáng 25/10, Tiến xác nhận sự kiện đã kết thúc lúc ~09:02.
+     Qua mốc này đồng hồ chuyển sang trạng thái "đã kết thúc". */
+  endAt: '2026-10-25T09:00:00+07:00',
   hosts: [
     'Khoa Khoa học và Kỹ thuật Địa chất',
     'Khoa Môi trường',
@@ -63,7 +66,7 @@ const ORG_LOGOS = [
 const HERO_IMAGE = '/hero.jpg';
 
 /* Bộ đếm ngược — tự cập nhật mỗi giây */
-function useCountdown(target: string) {
+function useCountdown(target: string, endTarget?: string) {
   const [now, setNow] = useState(() => Date.now());
 
   useEffect(() => {
@@ -79,13 +82,13 @@ function useCountdown(target: string) {
     minutes: Math.floor(remaining / 60000) % 60,
     seconds: Math.floor(remaining / 1000) % 60,
     isStarted: remaining === 0,
-    /* Sau ngày thi đấu (quá 24 giờ kể từ mốc đếm ngược 5h30) thì giải đã kết thúc */
-    isEnded: now >= startTime + 86400000,
+    /* Sau mốc kết thúc (sáng 25/10) thì giải đã kết thúc */
+    isEnded: endTarget ? now >= new Date(endTarget).getTime() : now >= startTime + 86400000,
   };
 }
 
 export function Home() {
-  const { days, hours, minutes, seconds, isStarted, isEnded } = useCountdown(EVENT.startAt);
+  const { days, hours, minutes, seconds, isStarted, isEnded } = useCountdown(EVENT.startAt, EVENT.endAt);
   const pad = (n: number) => String(n).padStart(2, '0');
 
   const countdownCells = [
@@ -174,8 +177,7 @@ export function Home() {
           <div className="mt-8 sm:mt-12">
             {isEnded ? (
               <p className="inline-flex items-center gap-2 rounded-2xl border border-white/25 bg-white/10 px-5 py-3 text-sm font-semibold text-white backdrop-blur sm:text-base">
-                🎉 Giải chạy đã diễn ra thành công — mời bạn tra cứu giấy chứng nhận và xem ảnh
-                sự kiện!
+                🎉 Giải chạy đã kết thúc — cảm ơn tất cả vận động viên đã tham gia!
               </p>
             ) : isStarted ? (
               <p className="inline-flex items-center gap-2 rounded-2xl border border-white/25 bg-white/10 px-5 py-3 text-sm font-semibold text-white backdrop-blur sm:text-base">
