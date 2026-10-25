@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Users, Image as ImageIcon, ShieldCheck, Loader2, ListChecks, Lock, Mail, Eye } from 'lucide-react';
+import { Users, Image as ImageIcon, ShieldCheck, Loader2, ListChecks, Lock, Mail, Eye, Trophy } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { isPublicLocked } from '../lib/siteLock';
@@ -10,6 +10,7 @@ interface Stats {
   totalAlbums: number;
   totalPhotos: number;
   unreadFeedback: number | null;
+  pendingResults: number | null;
   loading: boolean;
 }
 
@@ -35,6 +36,7 @@ export function AdminDashboard() {
     totalAlbums: 0,
     totalPhotos: 0,
     unreadFeedback: null,
+    pendingResults: null,
     loading: true,
   });
   /* Lượt truy cập — null = đang tải, lỗi thì hiện câu báo riêng, không làm mất
@@ -51,7 +53,7 @@ export function AdminDashboard() {
   useEffect(() => {
     const loadStats = async () => {
       try {
-        const [totalRes, eligibleRes, albumsRes, photosRes, locked, unreadFeedback] =
+        const [totalRes, eligibleRes, albumsRes, photosRes, locked, unreadFeedback, pendingResults] =
           await Promise.all([
             supabase.from('certificate_records').select('*', { count: 'exact', head: true }),
             supabase
@@ -71,6 +73,16 @@ export function AdminDashboard() {
                 (res) => res.count ?? null,
                 () => null,
               ),
+            /* Số kết quả chạy chờ duyệt — nuốt lỗi riêng để bảng kết quả chưa có
+               cũng không làm mất số liệu các bảng khác */
+            supabase
+              .from('race_result_submissions')
+              .select('*', { count: 'exact', head: true })
+              .eq('is_verified', false)
+              .then(
+                (res) => res.count ?? null,
+                () => null,
+              ),
           ]);
         setStats((s) => ({
           ...s,
@@ -79,6 +91,7 @@ export function AdminDashboard() {
           totalAlbums: albumsRes.count ?? 0,
           totalPhotos: photosRes.count ?? 0,
           unreadFeedback,
+          pendingResults,
           loading: false,
         }));
         setSiteLocked(locked);
@@ -301,6 +314,21 @@ export function AdminDashboard() {
               badge:
                 stats.unreadFeedback && stats.unreadFeedback > 0
                   ? `${stats.unreadFeedback} mới`
+                  : null,
+            },
+          ]}
+        />
+        <ActionCard
+          title="Kết quả chạy"
+          icon={<Trophy className="h-5 w-5 text-amber-500" />}
+          items={[
+            {
+              to: '/quan-tri/ket-qua',
+              label: 'Duyệt kết quả chạy',
+              icon: Trophy,
+              badge:
+                stats.pendingResults && stats.pendingResults > 0
+                  ? `${stats.pendingResults} chờ duyệt`
                   : null,
             },
           ]}

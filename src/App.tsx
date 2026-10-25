@@ -7,7 +7,9 @@ import { Home } from './pages/Home';
 import { CertificateLookup } from './pages/CertificateLookup';
 import { Gallery } from './pages/Gallery';
 import { Feedback } from './pages/Feedback';
+import { SubmitResult } from './pages/SubmitResult';
 import { AdminFeedback } from './pages/AdminFeedback';
+import { AdminResults } from './pages/AdminResults';
 import { AdminLogin } from './pages/AdminLogin';
 import { AdminDashboard } from './pages/AdminDashboard';
 import { AdminCertificates } from './pages/AdminCertificates';
@@ -63,6 +65,7 @@ const App = () => {
           <Route path="/tra-cuu" element={<CertificateLookup />} />
           <Route path="/thu-vien-anh" element={<Gallery />} />
           <Route path="/gop-y" element={<Feedback />} />
+          <Route path="/nop-ket-qua" element={<SubmitResult />} />
         </Route>
 
         <Route path="/quan-tri/dang-nhap" element={<AdminLogin onLogin={handleLogin} />} />
@@ -78,6 +81,7 @@ const App = () => {
           <Route path="/quan-tri/chung-nhan" element={<AdminCertificates />} />
           <Route path="/quan-tri/anh" element={<AdminGallery />} />
           <Route path="/quan-tri/phan-anh" element={<AdminFeedback />} />
+          <Route path="/quan-tri/ket-qua" element={<AdminResults />} />
         </Route>
 
         <Route path="*" element={<Navigate to="/" replace />} />
