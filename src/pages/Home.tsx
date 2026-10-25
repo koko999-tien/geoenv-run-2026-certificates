@@ -246,14 +246,14 @@ export function Home() {
               </div>
             </Link>
 
-            {/* Ô 3: Góc chill — mini game đố vui */}
-            <Link to="/goc-chill" className="group block sm:col-span-2 lg:col-span-1">
+            {/* Ô 3: Minigame */}
+            <Link to="/minigame" className="group block sm:col-span-2 lg:col-span-1">
               <div className="card flex h-full items-center gap-4 p-5 transition-all duration-200 hover:-translate-y-0.5 hover:border-violet-200 hover:shadow-lg sm:p-6">
                 <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-violet-500 shadow-md shadow-violet-500/25">
                   <Gamepad2 className="h-6 w-6 text-white" />
                 </span>
                 <div className="min-w-0">
-                  <h2 className="text-base font-bold text-slate-900 sm:text-lg">Góc chill</h2>
+                  <h2 className="text-base font-bold text-slate-900 sm:text-lg">Minigame</h2>
                   <p className="mt-0.5 text-sm leading-snug text-slate-600">
                     Chơi mini game đố vui về GEOENV RUN, xem bạn được mấy điểm.
                   </p>

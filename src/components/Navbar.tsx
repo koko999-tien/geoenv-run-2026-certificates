@@ -6,7 +6,7 @@ import { Menu, X } from 'lucide-react';
 const NAV_LINKS = [
   { to: '/tra-cuu', label: 'Tra cứu giấy chứng nhận' },
   { to: '/nop-ket-qua', label: 'Nộp kết quả' },
-  { to: '/goc-chill', label: 'Góc chill' },
+  { to: '/minigame', label: 'Minigame' },
   { to: '/gop-y', label: 'Góp ý & phản ánh' },
   { to: '/quan-tri', label: 'Quản trị' },
 ];

@@ -64,7 +64,8 @@ const App = () => {
           <Route path="/tra-cuu" element={<CertificateLookup />} />
           <Route path="/gop-y" element={<Feedback />} />
           <Route path="/nop-ket-qua" element={<SubmitResult />} />
-          <Route path="/goc-chill" element={<ChillGame />} />
+          <Route path="/goc-chill" element={<Navigate to="/minigame" replace />} />
+          <Route path="/minigame" element={<ChillGame />} />
         </Route>
 
         <Route path="/quan-tri/dang-nhap" element={<AdminLogin onLogin={handleLogin} />} />

@@ -177,7 +177,7 @@ export function ChillGame() {
         <span className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-violet-100">
           <Gamepad2 className="h-7 w-7 text-violet-600" />
         </span>
-        <h1 className="mt-4 text-2xl font-bold text-slate-900 sm:text-3xl">Góc chill — Mini game</h1>
+        <h1 className="mt-4 text-2xl font-bold text-slate-900 sm:text-3xl">Minigame</h1>
         <p className="mt-2 text-sm leading-relaxed text-slate-600 sm:text-base">
           Bạn hiểu GEOENV RUN đến đâu? Trả lời 15 câu hỏi, có vài câu hóc búa đấy — không
           tính giờ, sai cũng không sao.
