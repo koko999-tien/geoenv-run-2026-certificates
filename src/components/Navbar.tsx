@@ -21,7 +21,7 @@ export function Navbar() {
         <div className="flex h-16 items-center justify-between">
           <Link to="/" className="flex shrink-0 items-center gap-2.5" onClick={closeMenu}>
             <img
-              src="/favicon.svg"
+              src="/favicon.png"
               alt="Logo GEOENV RUN 2026"
               className="h-9 w-9 rounded-full ring-2 ring-geoenv-100"
             />
