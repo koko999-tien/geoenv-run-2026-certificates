@@ -1,7 +1,7 @@
 import { Lock } from 'lucide-react';
 
-/* Thông báo tạm khóa dùng chung cho trang tra cứu và thư viện ảnh khi khu vực
-   công khai đang khóa. Nội dung do BTC duyệt — sửa chữ tại đây nếu BTC đổi ý. */
+/* Thông báo tạm khóa dùng cho trang tra cứu khi khu vực công khai đang khóa.
+   Nội dung do BTC duyệt — sửa chữ tại đây nếu BTC đổi ý. */
 export function PublicLockNotice() {
   return (
     <div className="card mt-8 p-8 text-center sm:p-10">
@@ -12,8 +12,8 @@ export function PublicLockNotice() {
         Khu vực này đang tạm khóa
       </h2>
       <p className="mx-auto mt-2 max-w-md text-sm leading-relaxed text-slate-600 sm:text-base">
-        Tra cứu giấy chứng nhận và thư viện ảnh đang tạm khóa để Ban tổ chức hoàn thiện dữ liệu
-        sau giải chạy. Ban tổ chức sẽ thông báo khi mở lại — bạn quay lại sau nhé!
+        Tra cứu giấy chứng nhận đang tạm khóa để Ban tổ chức hoàn thiện dữ liệu sau giải
+        chạy. Ban tổ chức sẽ thông báo khi mở lại — bạn quay lại sau nhé!
       </p>
     </div>
   );

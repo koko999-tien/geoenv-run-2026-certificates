@@ -5,7 +5,6 @@ import { Layout } from './components/Layout';
 import { AdminLayout } from './components/AdminLayout';
 import { Home } from './pages/Home';
 import { CertificateLookup } from './pages/CertificateLookup';
-import { Gallery } from './pages/Gallery';
 import { Feedback } from './pages/Feedback';
 import { SubmitResult } from './pages/SubmitResult';
 import { AdminFeedback } from './pages/AdminFeedback';
@@ -13,7 +12,6 @@ import { AdminResults } from './pages/AdminResults';
 import { AdminLogin } from './pages/AdminLogin';
 import { AdminDashboard } from './pages/AdminDashboard';
 import { AdminCertificates } from './pages/AdminCertificates';
-import { AdminGallery } from './pages/AdminGallery';
 import { VisitTracker } from './components/VisitTracker';
 
 /* Web này là trang đơn (không tải lại trang khi chuyển mục) nên trình duyệt giữ
@@ -63,7 +61,6 @@ const App = () => {
         <Route element={<Layout />}>
           <Route path="/" element={<Home />} />
           <Route path="/tra-cuu" element={<CertificateLookup />} />
-          <Route path="/thu-vien-anh" element={<Gallery />} />
           <Route path="/gop-y" element={<Feedback />} />
           <Route path="/nop-ket-qua" element={<SubmitResult />} />
         </Route>
@@ -79,7 +76,6 @@ const App = () => {
         >
           <Route path="/quan-tri" element={<AdminDashboard />} />
           <Route path="/quan-tri/chung-nhan" element={<AdminCertificates />} />
-          <Route path="/quan-tri/anh" element={<AdminGallery />} />
           <Route path="/quan-tri/phan-anh" element={<AdminFeedback />} />
           <Route path="/quan-tri/ket-qua" element={<AdminResults />} />
         </Route>

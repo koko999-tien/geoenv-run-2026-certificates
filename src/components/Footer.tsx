@@ -29,11 +29,6 @@ export function Footer() {
                   Tra cứu giấy chứng nhận
                 </Link>
               </li>
-              <li>
-                <Link to="/thu-vien-anh" className="transition-colors hover:text-white">
-                  Thư viện ảnh
-                </Link>
-              </li>
             </ul>
           </div>
 

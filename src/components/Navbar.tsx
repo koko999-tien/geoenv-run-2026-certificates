@@ -5,7 +5,6 @@ import { Menu, X } from 'lucide-react';
 /* ✏️ Sửa tên liên kết tại đây — 1 dòng 1 trang */
 const NAV_LINKS = [
   { to: '/tra-cuu', label: 'Tra cứu giấy chứng nhận' },
-  { to: '/thu-vien-anh', label: 'Thư viện ảnh' },
   { to: '/nop-ket-qua', label: 'Nộp kết quả' },
   { to: '/gop-y', label: 'Góp ý & phản ánh' },
   { to: '/quan-tri', label: 'Quản trị' },

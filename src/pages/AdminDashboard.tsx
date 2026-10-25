@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Users, Image as ImageIcon, ShieldCheck, Loader2, ListChecks, Lock, Mail, Eye, Trophy } from 'lucide-react';
+import { Users, ShieldCheck, Loader2, ListChecks, Lock, Mail, Eye, Trophy } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { isPublicLocked } from '../lib/siteLock';
@@ -7,8 +7,6 @@ import { isPublicLocked } from '../lib/siteLock';
 interface Stats {
   totalCertificates: number;
   eligibleCount: number;
-  totalAlbums: number;
-  totalPhotos: number;
   unreadFeedback: number | null;
   pendingResults: number | null;
   loading: boolean;
@@ -25,7 +23,6 @@ interface VisitStats {
 const PAGE_NAMES: Record<string, string> = {
   '/': 'Trang chủ',
   '/tra-cuu': 'Tra cứu giấy chứng nhận',
-  '/thu-vien-anh': 'Thư viện ảnh',
   '/gop-y': 'Góp ý & phản ánh',
 };
 
@@ -33,8 +30,6 @@ export function AdminDashboard() {
   const [stats, setStats] = useState<Stats>({
     totalCertificates: 0,
     eligibleCount: 0,
-    totalAlbums: 0,
-    totalPhotos: 0,
     unreadFeedback: null,
     pendingResults: null,
     loading: true,
@@ -53,15 +48,13 @@ export function AdminDashboard() {
   useEffect(() => {
     const loadStats = async () => {
       try {
-        const [totalRes, eligibleRes, albumsRes, photosRes, locked, unreadFeedback, pendingResults] =
+        const [totalRes, eligibleRes, locked, unreadFeedback, pendingResults] =
           await Promise.all([
             supabase.from('certificate_records').select('*', { count: 'exact', head: true }),
             supabase
               .from('certificate_records')
               .select('*', { count: 'exact', head: true })
               .eq('is_eligible', true),
-            supabase.from('albums').select('*', { count: 'exact', head: true }),
-            supabase.from('photos').select('*', { count: 'exact', head: true }),
             isPublicLocked(),
             /* Số phản ánh chưa đọc — nuốt lỗi riêng để bảng hòm thư chưa có cũng
                không làm mất số liệu các bảng khác */
@@ -88,8 +81,6 @@ export function AdminDashboard() {
           ...s,
           totalCertificates: totalRes.count ?? 0,
           eligibleCount: eligibleRes.count ?? 0,
-          totalAlbums: albumsRes.count ?? 0,
-          totalPhotos: photosRes.count ?? 0,
           unreadFeedback,
           pendingResults,
           loading: false,
@@ -148,8 +139,8 @@ export function AdminDashboard() {
       setSiteLocked(next);
       setLockNotice(
         next
-          ? 'Đã khóa khu vực công khai: khách vào trang tra cứu/thư viện chỉ thấy thông báo tạm khóa.'
-          : 'Đã mở lại khu vực công khai: mọi người vào tra cứu/thư viện bình thường.',
+          ? 'Đã khóa khu vực công khai: khách vào trang tra cứu chỉ thấy thông báo tạm khóa.'
+          : 'Đã mở lại khu vực công khai: mọi người vào tra cứu bình thường.',
       );
     }
     setToggling(false);
@@ -158,8 +149,6 @@ export function AdminDashboard() {
   const statCards = [
     { title: 'Tổng hồ sơ chứng nhận', value: stats.totalCertificates, icon: Users, tone: 'bg-geoenv-50 text-geoenv-600 ring-geoenv-100' },
     { title: 'Đủ điều kiện nhận', value: stats.eligibleCount, icon: ShieldCheck, tone: 'bg-emerald-50 text-emerald-600 ring-emerald-100' },
-    { title: 'Album ảnh', value: stats.totalAlbums, icon: ImageIcon, tone: 'bg-sky-50 text-sky-600 ring-sky-100' },
-    { title: 'Tổng ảnh', value: stats.totalPhotos, icon: ImageIcon, tone: 'bg-slate-100 text-slate-600 ring-slate-200' },
   ];
 
   return (
@@ -169,8 +158,8 @@ export function AdminDashboard() {
         <p className="mt-1 text-sm text-slate-600">Bức tranh tổng thể sự kiện GEOENV RUN 2026</p>
       </div>
 
-      {/* 4 ô thống kê — số thật từ Supabase */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      {/* 2 ô thống kê — số thật từ Supabase */}
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         {statCards.map((card) => (
           <div key={card.title} className="card flex items-center justify-between p-5">
             <div className="min-w-0">
@@ -250,7 +239,7 @@ export function AdminDashboard() {
           Khóa khu vực công khai
         </h3>
         <p className="mt-2 text-sm leading-relaxed text-slate-600">
-          Khi khóa: khách chưa đăng nhập vào trang tra cứu giấy chứng nhận hoặc thư viện ảnh chỉ
+          Khi khóa: khách chưa đăng nhập vào trang tra cứu giấy chứng nhận chỉ
           thấy thông báo tạm khóa; quản trị viên đã đăng nhập vẫn dùng bình thường để nhập và kiểm
           tra dữ liệu.
         </p>
@@ -287,20 +276,13 @@ export function AdminDashboard() {
         {lockNotice && <p className="mt-3 text-sm text-slate-700">{lockNotice}</p>}
       </div>
 
-      {/* Hai khu thao tác nhanh — ✏️ sửa tên nút tại đây */}
+      {/* Các khu thao tác nhanh — ✏️ sửa tên nút tại đây */}
       <div className="mt-6 grid grid-cols-1 gap-5 lg:grid-cols-2">
         <ActionCard
           title="Quản lý chứng nhận"
           icon={<Users className="h-5 w-5 text-geoenv-600" />}
           items={[
             { to: '/quan-tri/chung-nhan', label: 'Vào quản lý chứng nhận', icon: ListChecks },
-          ]}
-        />
-        <ActionCard
-          title="Quản lý thư viện ảnh"
-          icon={<ImageIcon className="h-5 w-5 text-emerald-600" />}
-          items={[
-            { to: '/quan-tri/anh', label: 'Vào thư viện ảnh', icon: ImageIcon },
           ]}
         />
         <ActionCard
