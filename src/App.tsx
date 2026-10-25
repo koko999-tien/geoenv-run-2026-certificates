@@ -7,6 +7,7 @@ import { Home } from './pages/Home';
 import { CertificateLookup } from './pages/CertificateLookup';
 import { Feedback } from './pages/Feedback';
 import { SubmitResult } from './pages/SubmitResult';
+import { ChillGame } from './pages/ChillGame';
 import { AdminFeedback } from './pages/AdminFeedback';
 import { AdminResults } from './pages/AdminResults';
 import { AdminLogin } from './pages/AdminLogin';
@@ -63,6 +64,7 @@ const App = () => {
           <Route path="/tra-cuu" element={<CertificateLookup />} />
           <Route path="/gop-y" element={<Feedback />} />
           <Route path="/nop-ket-qua" element={<SubmitResult />} />
+          <Route path="/goc-chill" element={<ChillGame />} />
         </Route>
 
         <Route path="/quan-tri/dang-nhap" element={<AdminLogin onLogin={handleLogin} />} />
