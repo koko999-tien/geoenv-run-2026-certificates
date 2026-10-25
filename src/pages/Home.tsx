@@ -376,9 +376,9 @@ export function Home() {
                 VĐV nam xuất sắc nhất
               </p>
               <h3 className="mt-1 text-lg font-bold leading-snug text-slate-900">
-                Phạm Khánh Hưng
+                Nguyễn Tiến Đạt
               </h3>
-              <p className="text-sm text-slate-500">Đội 10</p>
+              <p className="text-sm text-slate-500">Đội 06</p>
               <p className="mt-2 text-base font-extrabold text-geoenv-700">300.000đ</p>
             </div>
             <div className="card p-5 text-center sm:p-6">
