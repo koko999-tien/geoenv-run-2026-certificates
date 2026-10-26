@@ -28,6 +28,8 @@ const PAGE_NAMES: Record<string, string> = {
   '/tra-cuu': 'Tra cứu giấy chứng nhận',
   '/gop-y': 'Góp ý & phản ánh',
   '/minigame': 'Minigame',
+  '/minigame/do-vui': 'Đố vui',
+  '/minigame/chay-vo-tan': 'Chạy vô tận',
   '/nop-ket-qua': 'Nộp kết quả chạy',
   '/kiem-tra': 'Kiểm tra (dữ liệu thử)',
 };

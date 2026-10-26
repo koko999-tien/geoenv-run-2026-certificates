@@ -19,6 +19,8 @@ const SubmitResult = lazy(() =>
   import('./pages/SubmitResult').then((m) => ({ default: m.SubmitResult })),
 );
 const ChillGame = lazy(() => import('./pages/ChillGame').then((m) => ({ default: m.ChillGame })));
+const QuizPage = lazy(() => import('./pages/QuizPage').then((m) => ({ default: m.QuizPage })));
+const RunnerPage = lazy(() => import('./pages/RunnerPage').then((m) => ({ default: m.RunnerPage })));
 const AdminFeedback = lazy(() =>
   import('./pages/AdminFeedback').then((m) => ({ default: m.AdminFeedback })),
 );
@@ -96,6 +98,8 @@ const App = () => {
           <Route path="/nop-ket-qua" element={<SubmitResult />} />
           <Route path="/goc-chill" element={<Navigate to="/minigame" replace />} />
           <Route path="/minigame" element={<ChillGame />} />
+          <Route path="/minigame/do-vui" element={<QuizPage />} />
+          <Route path="/minigame/chay-vo-tan" element={<RunnerPage />} />
         </Route>
 
         <Route path="/quan-tri/dang-nhap" element={<AdminLogin onLogin={handleLogin} />} />

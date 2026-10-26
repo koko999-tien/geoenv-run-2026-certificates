@@ -1,334 +1,14 @@
-import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Gamepad2, ArrowRight, RotateCcw, Trophy, Check, X, Footprints, Lock } from 'lucide-react';
+import { Gamepad2, Footprints, Lock, ArrowRight } from 'lucide-react';
 import { useGameLock } from '../lib/siteLock';
-import { RunnerGame } from './RunnerGame';
 
-/* Trang Minigame: 2 tab — đố vui (cũ) và chạy vô tận (mới).
-   Tab chạy vô tận ra mắt ở trạng thái KHÓA: khách chỉ thấy thông báo tạm khóa,
-   quản trị viên đăng nhập mới chơi và lưu điểm được. Mở cho mọi người bằng
-   công tắc trong Dashboard, không cần đẩy code. */
-
-/* Mini game đố vui về GEOENV RUN — chạy hoàn toàn trên trình duyệt, không cần
-   đăng nhập, không tính giờ, không lưu điểm lên máy chủ. */
-interface Question {
-  q: string;
-  options: string[];
-  answer: number;
-}
-
-const QUESTIONS: Question[] = [
-  {
-    q: 'GEOENV RUN SEASON 2 có bao nhiêu đội thi đấu?',
-    options: ['81 đội', '85 đội', '100 đội', '60 đội'],
-    answer: 1,
-  },
-  {
-    q: 'Thể thức Ekiden của giải là gì?',
-    options: [
-      '4 người/đội, mỗi người 2,5km',
-      '5 người/đội, mỗi người 2km',
-      '10 người/đội, mỗi người 1km',
-      '2 người/đội, mỗi người 5km',
-    ],
-    answer: 1,
-  },
-  {
-    q: 'Đội nào đoạt giải Nhất chung cuộc?',
-    options: ['Pò Fēng Zhě', 'Humg Basketball Club - HBC', 'SIÊU LỐP', 'Gà Bay Vịt Chạy'],
-    answer: 2,
-  },
-  {
-    q: 'Đội nào đoạt giải Nhì chung cuộc?',
-    options: ['SIÊU LỐP', 'Pò Fēng Zhě', 'Humg Basketball Club - HBC', 'SKIN WALKER'],
-    answer: 1,
-  },
-  {
-    q: 'Đội nào đoạt giải Ba chung cuộc?',
-    options: ['SIÊU LỐP', 'Pò Fēng Zhě', 'Humg Basketball Club - HBC', 'Gà Bay Vịt Chạy'],
-    answer: 2,
-  },
-  {
-    q: 'VĐV nam xuất sắc nhất là ai?',
-    options: ['Trần Khánh Nam', 'Lê Công Cường', 'Nguyễn Tiến Đạt', 'Nguyễn Hữu Linh'],
-    answer: 2,
-  },
-  {
-    q: 'VĐV nữ xuất sắc nhất là ai?',
-    options: ['Nguyễn Hiền Trang', 'Ngô Phương Chiển', 'Đỗ Thị Thuỳ Dung', 'Nguyễn Thị Hường'],
-    answer: 1,
-  },
-  {
-    q: "Đội nào nhận giải 'Đội kiên cường nhất'?",
-    options: ['SIÊU LỐP', 'Pò Fēng Zhě', 'Gà Bay Vịt Chạy', 'SKIN WALKER'],
-    answer: 2,
-  },
-  {
-    q: 'Đội SIÊU LỐP mang số báo danh đội là bao nhiêu?',
-    options: ['Đội 60', 'Đội 06', 'Đội 10', 'Đội 24'],
-    answer: 1,
-  },
-  {
-    q: "Đội 'Gà Bay Vịt Chạy' mang số báo danh đội là bao nhiêu?",
-    options: ['Đội 06', 'Đội 30', 'Đội 24', 'Đội 48'],
-    answer: 2,
-  },
-  {
-    q: 'Tiền thưởng của giải Nhất đồng đội là bao nhiêu?',
-    options: ['500.000đ', '1.000.000đ', '1.500.000đ', '3.000.000đ'],
-    answer: 2,
-  },
-  {
-    q: "Cuộc thi 'Khoảnh khắc ấn tượng' tính điểm như thế nào?",
-    options: [
-      'Chia sẻ kèm hashtag 3 điểm, reaction 1 điểm',
-      'Chia sẻ 1 điểm, reaction 3 điểm',
-      'Mỗi tương tác 2 điểm',
-      'Chỉ tính lượt chia sẻ',
-    ],
-    answer: 0,
-  },
-  {
-    q: "Hạn cuối gửi ảnh dự thi 'Khoảnh khắc ấn tượng' là khi nào?",
-    options: [
-      'Trước 20h 25/10/2026',
-      'Trước 20h 27/10/2026',
-      'Trước 20h 28/10/2026',
-      'Trước 20h 30/10/2026',
-    ],
-    answer: 1,
-  },
-  {
-    q: 'Giải chạy hướng tới kỷ niệm bao nhiêu năm thành lập Trường ĐH Mỏ – Địa chất?',
-    options: ['50 năm', '55 năm', '60 năm', '65 năm'],
-    answer: 2,
-  },
-  {
-    q: 'Giấy chứng nhận được làm cho bao nhiêu VĐV? (không tính các đội khách mời)',
-    options: ['425 VĐV', '405 VĐV', '400 VĐV', '415 VĐV'],
-    answer: 1,
-  },
-];
-
-function resultMessage(score: number) {
-  if (score === QUESTIONS.length) return 'Quá đỉnh! Bạn là fan cứng của GEOENV RUN rồi!';
-  if (score >= 12) return 'Giỏi quá! Bạn nhớ giải chạy rất rõ.';
-  if (score >= 8) return 'Khá ổn! Chơi lại một ván để lên điểm nhé.';
-  return 'Mới làm quen với giải chạy thôi, chơi lại nào!';
-}
-
-/* Pháo giấy tung khi đạt điểm cao (từ 12/15 trở lên) — toàn CSS, không cần thư viện */
-const CONFETTI_COLORS = ['#1e5fc4', '#10b981', '#f59e0b', '#ec4899', '#8b5cf6', '#06b6d4'];
-
-function Confetti() {
-  const pieces = useMemo(
-    () =>
-      Array.from({ length: 80 }, (_, i) => ({
-        id: i,
-        left: Math.random() * 100,
-        delay: Math.random() * 0.8,
-        duration: 2.6 + Math.random() * 2.2,
-        size: 6 + Math.random() * 8,
-        color: CONFETTI_COLORS[i % CONFETTI_COLORS.length],
-        round: Math.random() > 0.5,
-      })),
-    [],
-  );
-  return (
-    <div aria-hidden className="pointer-events-none fixed inset-0 z-50 overflow-hidden">
-      {pieces.map((p) => (
-        <span
-          key={p.id}
-          className="confetti-piece"
-          style={{
-            left: `${p.left}%`,
-            width: p.size,
-            height: p.round ? p.size : p.size * 0.5,
-            backgroundColor: p.color,
-            borderRadius: p.round ? '50%' : '2px',
-            animationDuration: `${p.duration}s`,
-            animationDelay: `${p.delay}s`,
-          }}
-        />
-      ))}
-    </div>
-  );
-}
-
-function QuizGame() {
-  const [index, setIndex] = useState(0);
-  const [selected, setSelected] = useState<number | null>(null);
-  const [score, setScore] = useState(0);
-  const [finished, setFinished] = useState(false);
-
-  const current = QUESTIONS[index];
-  const isLast = index === QUESTIONS.length - 1;
-
-  const choose = (i: number) => {
-    if (selected !== null) return;
-    setSelected(i);
-    if (i === current.answer) setScore((s) => s + 1);
-  };
-
-  const next = () => {
-    if (isLast) {
-      setFinished(true);
-    } else {
-      setIndex((v) => v + 1);
-      setSelected(null);
-    }
-  };
-
-  const restart = () => {
-    setIndex(0);
-    setSelected(null);
-    setScore(0);
-    setFinished(false);
-  };
-
-  if (finished) {
-    return (
-      <div className="text-center">
-        {score >= 12 && <Confetti />}
-        <span className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-amber-100">
-          <Trophy className="h-7 w-7 text-amber-600" />
-        </span>
-        <h2 className="mt-4 text-2xl font-bold text-slate-900 sm:text-3xl">Kết quả của bạn</h2>
-        <p className="mt-3 text-5xl font-black tabular-nums text-geoenv-700">
-          {score}/{QUESTIONS.length}
-        </p>
-        <p className="mt-3 text-base leading-relaxed text-slate-700">{resultMessage(score)}</p>
-        <div className="mt-6 flex flex-col gap-3 sm:flex-row sm:justify-center">
-          <button
-            onClick={restart}
-            className="flex items-center justify-center gap-2 rounded-xl bg-geoenv-600 px-6 py-3 text-sm font-semibold text-white transition-colors hover:bg-geoenv-700"
-          >
-            <RotateCcw className="h-4 w-4" />
-            Chơi lại
-          </button>
-          <Link
-            to="/"
-            className="flex items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-6 py-3 text-sm font-semibold text-slate-700 transition-colors hover:border-geoenv-300 hover:text-geoenv-700"
-          >
-            Về trang chủ
-          </Link>
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div>
-      <p className="text-center text-sm leading-relaxed text-slate-600 sm:text-base">
-        Bạn hiểu GEOENV RUN đến đâu? Trả lời 15 câu hỏi, có vài câu hóc búa đấy — không
-        tính giờ, sai cũng không sao.
-      </p>
-
-      <div className="card mt-8 p-5 sm:p-6">
-        <div className="flex items-center justify-between text-sm">
-          <span className="font-semibold text-slate-700">
-            Câu {index + 1}/{QUESTIONS.length}
-          </span>
-          <span className="font-semibold tabular-nums text-geoenv-700">{score} điểm</span>
-        </div>
-        <div className="mt-2 h-2 overflow-hidden rounded-full bg-slate-100">
-          <div
-            className="h-full rounded-full bg-geoenv-500 transition-all"
-            style={{ width: `${((index + 1) / QUESTIONS.length) * 100}%` }}
-          />
-        </div>
-
-        <h2 className="mt-5 text-lg font-bold leading-snug text-slate-900">{current.q}</h2>
-        <div className="mt-4 space-y-2.5">
-          {current.options.map((opt, i) => {
-            const isCorrect = selected !== null && i === current.answer;
-            const isWrongPick = selected === i && i !== current.answer;
-            const isDimmed = selected !== null && !isCorrect && !isWrongPick;
-            return (
-              <button
-                key={opt}
-                onClick={() => choose(i)}
-                disabled={selected !== null}
-                className={`flex w-full items-center gap-2 rounded-xl border px-4 py-3.5 text-left text-sm font-medium transition-all ${
-                  isCorrect
-                    ? 'border-emerald-300 bg-emerald-50 text-emerald-800'
-                    : isWrongPick
-                      ? 'border-red-300 bg-red-50 text-red-800'
-                      : isDimmed
-                        ? 'border-slate-200 bg-slate-50 text-slate-400'
-                        : 'border-slate-200 bg-slate-50 text-slate-700 hover:border-geoenv-300 hover:bg-geoenv-50'
-                }`}
-              >
-                <span className="flex-1">{opt}</span>
-                {isCorrect && <Check className="h-5 w-5 shrink-0" />}
-                {isWrongPick && <X className="h-5 w-5 shrink-0" />}
-              </button>
-            );
-          })}
-        </div>
-
-        {selected !== null && (
-          <div className="mt-5">
-            <p className="text-sm font-medium leading-relaxed text-slate-700">
-              {selected === current.answer
-                ? 'Chính xác! 🎉'
-                : `Chưa đúng rồi — đáp án là: ${current.options[current.answer]}`}
-            </p>
-            <button
-              onClick={next}
-              className="mt-3 flex w-full items-center justify-center gap-2 rounded-xl bg-geoenv-600 px-5 py-3 text-sm font-semibold text-white transition-colors hover:bg-geoenv-700"
-            >
-              {isLast ? 'Xem kết quả' : 'Câu tiếp theo'}
-              <ArrowRight className="h-4 w-4" />
-            </button>
-          </div>
-        )}
-      </div>
-    </div>
-  );
-}
-
-/* Tab chạy vô tận: khóa với khách, quản trị viên đăng nhập mới chơi được. */
-function RunnerTab() {
-  const { checked, locked, isAdmin } = useGameLock();
-
-  if (!checked) {
-    return <p className="py-10 text-center text-sm text-slate-500">Đang tải…</p>;
-  }
-
-  if (locked && !isAdmin) {
-    return (
-      <div className="card mt-8 p-6 text-center sm:p-8">
-        <span className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-amber-100">
-          <Lock className="h-7 w-7 text-amber-600" />
-        </span>
-        <h2 className="mt-4 text-xl font-bold text-slate-900">Trò chơi đang tạm khóa</h2>
-        <p className="mx-auto mt-2 max-w-md text-sm leading-relaxed text-slate-600">
-          Chỉ quản trị viên chơi được lúc này. Ban tổ chức sẽ thông báo khi mở cho mọi người.
-        </p>
-      </div>
-    );
-  }
-
-  return (
-    <div>
-      {locked && (
-        <div className="mb-5 rounded-xl bg-amber-50 px-4 py-3 text-center text-sm font-medium text-amber-800 ring-1 ring-amber-200">
-          Bạn đang chơi với quyền quản trị viên — trò chơi đang khóa với khách.
-        </div>
-      )}
-      <p className="text-center text-sm leading-relaxed text-slate-600 sm:text-base">
-        Vận động viên chạy vô tận: nhảy qua rào chắn, tảng đá, vũng nước. Càng chạy càng nhanh.
-      </p>
-      <div className="mt-8">
-        <RunnerGame />
-      </div>
-    </div>
-  );
-}
+/* Trang Minigame giờ chỉ là TRANG CHỦ của 2 trò chơi — 2 thẻ, mỗi thẻ nhảy
+   sang 1 trang riêng. Không tải sẵn code quiz lẫn code game như kiểu tab cũ,
+   nên mở trang nào cũng nhẹ hơn: mỗi trang chỉ tải code của chính nó. */
 
 export function ChillGame() {
-  const [tab, setTab] = useState<'quiz' | 'runner'>('quiz');
+  const { checked, locked, isAdmin } = useGameLock();
+  const showGameBadge = checked && locked;
 
   return (
     <div className="mx-auto max-w-2xl px-4 py-10 sm:px-6">
@@ -339,32 +19,49 @@ export function ChillGame() {
         <h1 className="mt-4 text-2xl font-bold text-slate-900 sm:text-3xl">Minigame</h1>
       </div>
 
-      <div className="mt-6 flex justify-center gap-2">
-        <button
-          onClick={() => setTab('quiz')}
-          className={`flex items-center gap-2 rounded-full px-5 py-2.5 text-sm font-semibold transition-colors ${
-            tab === 'quiz'
-              ? 'bg-geoenv-600 text-white'
-              : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-          }`}
+      <div className="mt-8 grid grid-cols-1 gap-4 sm:grid-cols-2">
+        <Link
+          to="/minigame/do-vui"
+          className="card group block p-6 transition-all hover:ring-2 hover:ring-geoenv-200"
         >
-          <Gamepad2 className="h-4 w-4" />
-          Đố vui
-        </button>
-        <button
-          onClick={() => setTab('runner')}
-          className={`flex items-center gap-2 rounded-full px-5 py-2.5 text-sm font-semibold transition-colors ${
-            tab === 'runner'
-              ? 'bg-geoenv-600 text-white'
-              : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-          }`}
-        >
-          <Footprints className="h-4 w-4" />
-          Chạy vô tận
-        </button>
-      </div>
+          <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-violet-100">
+            <Gamepad2 className="h-6 w-6 text-violet-600" />
+          </span>
+          <h2 className="mt-4 text-lg font-bold text-slate-900">Đố vui</h2>
+          <p className="mt-1 text-sm leading-relaxed text-slate-600">
+            15 câu hỏi về GEOENV RUN, không tính giờ.
+          </p>
+          <span className="mt-4 inline-flex items-center gap-1.5 text-sm font-semibold text-geoenv-700">
+            Chơi ngay
+            <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
+          </span>
+        </Link>
 
-      <div className="mt-6">{tab === 'quiz' ? <QuizGame /> : <RunnerTab />}</div>
+        <Link
+          to="/minigame/chay-vo-tan"
+          className="card group block p-6 transition-all hover:ring-2 hover:ring-geoenv-200"
+        >
+          <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-100">
+            <Footprints className="h-6 w-6 text-emerald-600" />
+          </span>
+          <span className="mt-4 flex items-center gap-2">
+            <h2 className="text-lg font-bold text-slate-900">Chạy vô tận</h2>
+            {showGameBadge && (
+              <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-bold text-amber-700">
+                <Lock className="h-3 w-3" />
+                {isAdmin ? 'Đang khóa' : 'Tạm khóa'}
+              </span>
+            )}
+          </span>
+          <p className="mt-1 text-sm leading-relaxed text-slate-600">
+            Nhảy, trượt, nhặt vật phẩm, phá kỷ lục.
+          </p>
+          <span className="mt-4 inline-flex items-center gap-1.5 text-sm font-semibold text-geoenv-700">
+            Chơi ngay
+            <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
+          </span>
+        </Link>
+      </div>
     </div>
   );
 }

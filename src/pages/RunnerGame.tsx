@@ -2678,7 +2678,7 @@ export function RunnerGame() {
             if (phase === 'ready' || phase === 'playing') jump();
             else if (phase === 'paused') togglePause();
           }}
-          className="block h-auto w-full cursor-pointer touch-manipulation select-none"
+          className="block h-auto w-full cursor-pointer touch-none select-none"
         />
 
         {/* Nút Bật/Tắt Âm Thanh góc trên */}
