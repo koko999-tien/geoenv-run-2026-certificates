@@ -10,29 +10,28 @@ import {
   Zap,
   ArrowUp,
   ArrowDown,
-  Sparkles,
-  Flame,
-  Award,
-  Copy,
-  Check,
+  Medal,
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 
 /* =========================================================================
-   GEOENV RUN 2026 - TRÒ CHƠI CHẠY VÔ TẬN NÂNG CẤP TOÀN DIỆN
-   - Đồ họa: Parallax 5 tầng, chu kỳ ngày - hoàng hôn - đêm, vạch cự ly, cờ phướn BTC
-   - Hoạt ảnh: Vận động viên 8 frame, dải băng tung bay, nhảy kép (double jump),
-               trượt người sát đất (slide), vấp ngã ngộ nghĩnh, vệt lướt tốc độ cao
-   - Lối chơi & Hiệu ứng: Khiên bảo vệ, nước tăng lực siêu tốc, chai nước + huy chương,
-                         âm thanh Web Audio tổng hợp đa kênh, pháo hoa giấy confetti
-   - Bảng xếp hạng: Đồng bộ Supabase thời gian thực, lưu kỷ lục cá nhân
+   GEOENV RUN 2026 — TRÒ CHƠI CHẠY VÔ TẬN, BẢN REMAKE THEO ĐẶC TẢ NGHỆ THUẬT
+   - Engine: delta-time clamp 0.05s, tọa độ float sub-pixel, HiDPI (dpr ≤ 2),
+     object pooling (không cấp phát trong vòng lặp), camera zoom/pan + shake.
+   - Nhân vật: rig xương khớp thủ tục (sine-wave, nghiêng theo tốc độ),
+     squash & stretch đàn hồi, ruy băng 10 điểm bay sau đầu, lộn vòng nhảy kép.
+   - Môi trường 6 lớp parallax + chu kỳ 4 pha: bình minh → ngày → hoàng hôn
+     → đêm cực quang, lát cắt địa chất dưới đường chạy.
+   - Gameplay: jump buffer 120ms, fast-fall ×2.5, khiên, booster, combo,
+     vật phẩm Eco Orb / Geo Crystal, chướng ngại tầm thấp + tầm cao (trượt).
+   - Bảo mật giữ nguyên: điểm chỉ lưu từ màn hình game over, trần 100000,
+     bảng game_scores, khóa game do trang cha (RunnerPage) quản lý.
    ========================================================================= */
 
 const W = 960;
 const H = 320;
 const GROUND = 265;
 const RUNNER_X = 90;
-const RUNNER_W = 36;
 const RUNNER_H = 50;
 const MAX_SCORE = 100000;
 const BEST_KEY = 'geoenv-runner-best';
@@ -41,13 +40,13 @@ const TEAM_KEY = 'geoenv-runner-team';
 const SOUND_KEY = 'geoenv-runner-sound';
 
 type Phase = 'ready' | 'playing' | 'paused' | 'over';
-type ObKind = 'hurdle' | 'rock' | 'puddle' | 'drone';
-type ItemKind = 'bottle' | 'medal' | 'shield' | 'booster';
+type ObKind = 'hurdle' | 'rock' | 'puddle' | 'drone' | 'barrel' | 'branch' | 'sign';
+type ItemKind = 'bottle' | 'medal' | 'shield' | 'booster' | 'eco' | 'crystal';
 
 interface Obstacle {
   x: number;
   kind: ObKind;
-  passed?: boolean;
+  seed: number;
 }
 
 interface Item {
@@ -59,51 +58,46 @@ interface Item {
 }
 
 interface Particle {
+  alive: boolean;
   x: number;
   y: number;
   vx: number;
   vy: number;
   r: number;
-  color: string;
   life: number;
   maxLife: number;
-  type?: 'dust' | 'spark' | 'confetti' | 'splash' | 'star';
-  rotation?: number;
-  vRot?: number;
+  color: string;
+  additive: boolean;
+  gravity: number;
+  rot: number;
+  vRot: number;
+  shape: 'dot' | 'rect' | 'spark';
 }
 
-interface SkidMark {
+interface FloatText {
+  alive: boolean;
   x: number;
-  w: number;
-  alpha: number;
+  y: number;
+  vy: number;
+  life: number;
+  maxLife: number;
+  text: string;
+  color: string;
 }
 
-interface Shockwave {
+interface Ghost {
+  x: number;
+  y: number;
+  pose: number;
+  life: number;
+}
+
+interface ShockRing {
   x: number;
   y: number;
   r: number;
   maxR: number;
   alpha: number;
-}
-
-interface FloatingText {
-  x: number;
-  y: number;
-  text: string;
-  color: string;
-  alpha: number;
-  scale: number;
-}
-
-interface RoundStats {
-  score: number;
-  distance: number;
-  bottles: number;
-  medals: number;
-  maxSpeedKmh: number;
-  maxCombo: number;
-  rank: 'S' | 'A' | 'B' | 'C';
-  rankTitle: string;
 }
 
 interface ScoreRow {
@@ -114,190 +108,105 @@ interface ScoreRow {
   created_at: string;
 }
 
-const OB_CONFIG: Record<ObKind, { w: number; h: number; yOffset: number }> = {
-  hurdle: { w: 30, h: 36, yOffset: 36 },
-  rock: { w: 36, h: 28, yOffset: 28 },
-  puddle: { w: 48, h: 14, yOffset: 12 },
-  drone: { w: 38, h: 22, yOffset: 68 }, // Bay tầm cao, bắt buộc trượt (slide) bên dưới!
+/* Hộp va chạm: chướng ngại tầm thấp chiếm mặt đất, tầm cao chiếm vùng trên
+   đầu (chỉ trượt mới lách được). Vật phẩm bay cao (huy chương) cần nhảy. */
+const OB_BOX: Record<ObKind, { w: number; h: number; yTop: number }> = {
+  hurdle: { w: 26, h: 32, yTop: GROUND - 32 },
+  rock: { w: 34, h: 26, yTop: GROUND - 26 },
+  puddle: { w: 44, h: 12, yTop: GROUND - 12 },
+  drone: { w: 40, h: 40, yTop: GROUND - 70 },
+  barrel: { w: 30, h: 34, yTop: GROUND - 34 },
+  branch: { w: 56, h: 40, yTop: GROUND - 70 },
+  sign: { w: 48, h: 40, yTop: GROUND - 70 },
 };
 
-/* ----------------- WEB AUDIO SYNTHESIZER ----------------- */
+const ITEM_VALUE: Record<ItemKind, number> = {
+  bottle: 50,
+  medal: 150,
+  shield: 0,
+  booster: 0,
+  eco: 30,
+  crystal: 80,
+};
+
+/* ---------------- Âm thanh tổng hợp Web Audio (đa kênh, có mute) -------- */
 class SoundEngine {
   private ctx: AudioContext | null = null;
-  public enabled = true;
+  private master: GainNode | null = null;
+  enabled = true;
 
-  constructor() {
-    const saved = localStorage.getItem(SOUND_KEY);
-    this.enabled = saved !== 'false';
-  }
-
-  private initCtx() {
+  private ensure(): AudioContext | null {
+    if (typeof window === 'undefined') return null;
     if (!this.ctx) {
-      const AudioCtx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
-      if (AudioCtx) this.ctx = new AudioCtx();
+      const AC =
+        window.AudioContext ??
+        (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+      if (!AC) return null;
+      this.ctx = new AC();
+      this.master = this.ctx.createGain();
+      this.master.gain.value = 0.22;
+      this.master.connect(this.ctx.destination);
     }
-    if (this.ctx && this.ctx.state === 'suspended') {
-      void this.ctx.resume();
-    }
+    if (this.ctx.state === 'suspended') void this.ctx.resume();
+    return this.ctx;
   }
 
-  playJump(double = false) {
+  private tone(freq: number, dur: number, type: OscillatorType, vol: number, slideTo?: number) {
     if (!this.enabled) return;
-    try {
-      this.initCtx();
-      if (!this.ctx) return;
-      const osc = this.ctx.createOscillator();
-      const gain = this.ctx.createGain();
-      osc.connect(gain);
-      gain.connect(this.ctx.destination);
-
-      const now = this.ctx.currentTime;
-      osc.type = 'sine';
-      const startF = double ? 320 : 180;
-      const endF = double ? 620 : 380;
-      osc.frequency.setValueAtTime(startF, now);
-      osc.frequency.exponentialRampToValueAtTime(endF, now + 0.12);
-
-      gain.gain.setValueAtTime(0.18, now);
-      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.14);
-
-      osc.start(now);
-      osc.stop(now + 0.14);
-    } catch {}
+    const ctx = this.ensure();
+    if (!ctx || !this.master) return;
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.type = type;
+    osc.frequency.setValueAtTime(freq, ctx.currentTime);
+    if (slideTo) osc.frequency.exponentialRampToValueAtTime(slideTo, ctx.currentTime + dur);
+    gain.gain.setValueAtTime(vol, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + dur);
+    osc.connect(gain);
+    gain.connect(this.master);
+    osc.start();
+    osc.stop(ctx.currentTime + dur);
   }
 
-  playSlide() {
-    if (!this.enabled) return;
-    try {
-      this.initCtx();
-      if (!this.ctx) return;
-      const osc = this.ctx.createOscillator();
-      const gain = this.ctx.createGain();
-      osc.connect(gain);
-      gain.connect(this.ctx.destination);
-
-      const now = this.ctx.currentTime;
-      osc.type = 'triangle';
-      osc.frequency.setValueAtTime(260, now);
-      osc.frequency.linearRampToValueAtTime(120, now + 0.16);
-
-      gain.gain.setValueAtTime(0.12, now);
-      gain.gain.linearRampToValueAtTime(0.001, now + 0.16);
-
-      osc.start(now);
-      osc.stop(now + 0.16);
-    } catch {}
+  unlock() {
+    this.ensure();
   }
-
-  playCollect(kind: ItemKind) {
-    if (!this.enabled) return;
-    try {
-      this.initCtx();
-      if (!this.ctx) return;
-      const now = this.ctx.currentTime;
-
-      if (kind === 'booster' || kind === 'shield') {
-        // Hợp âm hào quang
-        [440, 554, 659, 880].forEach((freq, idx) => {
-          if (!this.ctx) return;
-          const osc = this.ctx.createOscillator();
-          const gain = this.ctx.createGain();
-          osc.connect(gain);
-          gain.connect(this.ctx.destination);
-          osc.type = 'sine';
-          osc.frequency.setValueAtTime(freq, now + idx * 0.05);
-          gain.gain.setValueAtTime(0.15, now + idx * 0.05);
-          gain.gain.exponentialRampToValueAtTime(0.001, now + idx * 0.05 + 0.25);
-          osc.start(now + idx * 0.05);
-          osc.stop(now + idx * 0.05 + 0.25);
-        });
-      } else {
-        // Âm thanh nhặt chai nước / huy chương
-        const osc = this.ctx.createOscillator();
-        const gain = this.ctx.createGain();
-        osc.connect(gain);
-        gain.connect(this.ctx.destination);
-        osc.type = 'sine';
-        const f1 = kind === 'medal' ? 660 : 523;
-        const f2 = kind === 'medal' ? 880 : 784;
-        osc.frequency.setValueAtTime(f1, now);
-        osc.frequency.setValueAtTime(f2, now + 0.08);
-
-        gain.gain.setValueAtTime(0.15, now);
-        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.2);
-        osc.start(now);
-        osc.stop(now + 0.2);
-      }
-    } catch {}
+  click() {
+    this.tone(660, 0.06, 'sine', 0.5);
   }
-
-  playShieldBreak() {
-    if (!this.enabled) return;
-    try {
-      this.initCtx();
-      if (!this.ctx) return;
-      const now = this.ctx.currentTime;
-      const osc = this.ctx.createOscillator();
-      const gain = this.ctx.createGain();
-      osc.connect(gain);
-      gain.connect(this.ctx.destination);
-      osc.type = 'sawtooth';
-      osc.frequency.setValueAtTime(420, now);
-      osc.frequency.linearRampToValueAtTime(90, now + 0.2);
-      gain.gain.setValueAtTime(0.2, now);
-      gain.gain.linearRampToValueAtTime(0.001, now + 0.2);
-      osc.start(now);
-      osc.stop(now + 0.2);
-    } catch {}
+  jump() {
+    this.tone(300, 0.16, 'sine', 0.7, 620);
   }
-
-  playMilestone() {
-    if (!this.enabled) return;
-    try {
-      this.initCtx();
-      if (!this.ctx) return;
-      const now = this.ctx.currentTime;
-      [523, 659, 784, 1046].forEach((f, i) => {
-        if (!this.ctx) return;
-        const osc = this.ctx.createOscillator();
-        const gain = this.ctx.createGain();
-        osc.connect(gain);
-        gain.connect(this.ctx.destination);
-        osc.type = 'triangle';
-        osc.frequency.setValueAtTime(f, now + i * 0.08);
-        gain.gain.setValueAtTime(0.18, now + i * 0.08);
-        gain.gain.exponentialRampToValueAtTime(0.001, now + i * 0.08 + 0.25);
-        osc.start(now + i * 0.08);
-        osc.stop(now + i * 0.08 + 0.25);
-      });
-    } catch {}
+  doubleJump() {
+    this.tone(520, 0.2, 'triangle', 0.7, 980);
   }
-
-  playGameOver() {
-    if (!this.enabled) return;
-    try {
-      this.initCtx();
-      if (!this.ctx) return;
-      const now = this.ctx.currentTime;
-      const osc = this.ctx.createOscillator();
-      const gain = this.ctx.createGain();
-      osc.connect(gain);
-      gain.connect(this.ctx.destination);
-      osc.type = 'sawtooth';
-      osc.frequency.setValueAtTime(290, now);
-      osc.frequency.linearRampToValueAtTime(80, now + 0.45);
-      gain.gain.setValueAtTime(0.25, now);
-      gain.gain.linearRampToValueAtTime(0.001, now + 0.45);
-      osc.start(now);
-      osc.stop(now + 0.45);
-    } catch {}
+  land() {
+    this.tone(140, 0.1, 'sine', 0.6, 70);
+  }
+  coin() {
+    this.tone(880, 0.09, 'sine', 0.6);
+    this.tone(1320, 0.12, 'sine', 0.5);
+  }
+  powerup() {
+    this.tone(523, 0.1, 'triangle', 0.6);
+    this.tone(784, 0.14, 'triangle', 0.6);
+  }
+  shieldBreak() {
+    this.tone(900, 0.25, 'sawtooth', 0.5, 180);
+  }
+  crash() {
+    this.tone(220, 0.35, 'sawtooth', 0.8, 55);
+  }
+  milestone() {
+    this.tone(659, 0.12, 'triangle', 0.6);
+    this.tone(880, 0.2, 'triangle', 0.6);
   }
 }
 
 const soundEngine = new SoundEngine();
 
-/* Helper vẽ bo góc */
-function roundRect(
+/* ---------------- Helpers vẽ vector thủ tục ---------------------------- */
+function roundRectPath(
   ctx: CanvasRenderingContext2D,
   x: number,
   y: number,
@@ -314,2310 +223,936 @@ function roundRect(
   ctx.closePath();
 }
 
-/* =========================================================================
-   HỆ THỐNG VẼ ĐỒ HỌA PARALLAX & BỐI CẢNH (DAY / SUNSET / NIGHT)
-   Phiên bản V3: Chuyển cảnh mượt mà (smooth lerp), cực quang, sao băng,
-   bầy chim bay, đom đóm đêm, cỏ lau lay, cầu vồng, tia nắng, phản chiếu
-   nước, hàng rào khán giả, khán giả cổ vũ, biển quảng cáo.
-   ========================================================================= */
+function hexToRgb(hex: string): [number, number, number] {
+  const n = parseInt(hex.slice(1), 16);
+  return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
+}
 
-/* Helper nội suy mượt giữa hai hex color theo t ∈ [0,1] */
 function lerpColor(a: string, b: string, t: number): string {
-  const pa = parseInt(a.slice(1), 16);
-  const pb = parseInt(b.slice(1), 16);
-  const r = Math.round(((pa >> 16) & 0xff) * (1 - t) + ((pb >> 16) & 0xff) * t);
-  const g = Math.round(((pa >> 8) & 0xff) * (1 - t) + ((pb >> 8) & 0xff) * t);
-  const bl = Math.round((pa & 0xff) * (1 - t) + (pb & 0xff) * t);
-  return `#${((1 << 24) | (r << 16) | (g << 8) | bl).toString(16).slice(1)}`;
+  const [r1, g1, b1] = hexToRgb(a);
+  const [r2, g2, b2] = hexToRgb(b);
+  const r = Math.round(r1 + (r2 - r1) * t);
+  const g = Math.round(g1 + (g2 - g1) * t);
+  const bl = Math.round(b1 + (b2 - b1) * t);
+  return `rgb(${r},${g},${bl})`;
 }
 
-/* Helper vẽ ngôi sao 5 cánh thật */
-function drawStar(ctx: CanvasRenderingContext2D, cx: number, cy: number, r: number, spikes = 5) {
-  ctx.beginPath();
-  for (let i = 0; i < spikes * 2; i++) {
-    const radius = i % 2 === 0 ? r : r * 0.4;
-    const angle = (Math.PI / spikes) * i - Math.PI / 2;
-    const sx = cx + Math.cos(angle) * radius;
-    const sy = cy + Math.sin(angle) * radius;
-    if (i === 0) ctx.moveTo(sx, sy);
-    else ctx.lineTo(sx, sy);
-  }
-  ctx.closePath();
-}
-
-function drawEnvironment(ctx: CanvasRenderingContext2D, distance: number, frame: number) {
-  /* ---- Tính toán thời gian trong ngày với nội suy mượt ---- */
-  const timeProgress = (distance % 4200) / 4200;
-
-  // Pha: 0→0.30 Ngày, 0.30→0.45 Chuyển hoàng hôn, 0.45→0.60 Hoàng hôn,
-  //       0.60→0.72 Chuyển đêm, 0.72→1.0 Đêm
-  let skyTop: string, skyMid: string, skyBot: string;
-  let sunMoonColor: string, sunMoonGlow: string;
-  let mountainFar: string, mountainNear: string;
-  let treeFoliage: string, grassBright: string, grassDark: string;
-  let isNight = false;
-  let isSunset = false;
-  let nightT = 0; // 0‒1 cho cường độ đêm (dùng cho sao, đom đóm…)
-
-  if (timeProgress <= 0.30) {
-    // Ban ngày
-    skyTop = '#38bdf8'; skyMid = '#bae6fd'; skyBot = '#f0f9ff';
-    sunMoonColor = '#fef08a'; sunMoonGlow = 'rgba(254, 240, 138, 0.35)';
-    mountainFar = '#93c5fd'; mountainNear = '#60a5fa';
-    treeFoliage = '#10b981'; grassBright = '#22c55e'; grassDark = '#15803d';
-  } else if (timeProgress <= 0.45) {
-    // Chuyển cảnh ngày → hoàng hôn (lerp mượt)
-    isSunset = true;
-    const t = (timeProgress - 0.30) / 0.15;
-    skyTop = lerpColor('#38bdf8', '#f97316', t);
-    skyMid = lerpColor('#bae6fd', '#fb923c', t);
-    skyBot = lerpColor('#f0f9ff', '#fed7aa', t);
-    sunMoonColor = lerpColor('#fef08a', '#fbbf24', t);
-    sunMoonGlow = `rgba(251, ${Math.round(240 - 94 * t)}, ${Math.round(138 - 78 * t)}, ${(0.35 + 0.05 * t).toFixed(2)})`;
-    mountainFar = lerpColor('#93c5fd', '#a855f7', t);
-    mountainNear = lerpColor('#60a5fa', '#7c3aed', t);
-    treeFoliage = lerpColor('#10b981', '#6d28d9', t);
-    grassBright = lerpColor('#22c55e', '#a855f7', t);
-    grassDark = lerpColor('#15803d', '#6d28d9', t);
-  } else if (timeProgress <= 0.60) {
-    // Hoàng hôn
-    isSunset = true;
-    const t = (timeProgress - 0.45) / 0.15;
-    skyTop = lerpColor('#f97316', '#c026d3', t);
-    skyMid = lerpColor('#fb923c', '#f43f5e', t);
-    skyBot = '#fed7aa';
-    sunMoonColor = '#fbbf24'; sunMoonGlow = 'rgba(251, 146, 60, 0.4)';
-    mountainFar = lerpColor('#a855f7', '#7e22ce', t);
-    mountainNear = lerpColor('#7c3aed', '#581c87', t);
-    treeFoliage = '#6d28d9'; grassBright = '#a855f7'; grassDark = '#6d28d9';
-  } else if (timeProgress <= 0.72) {
-    // Chuyển cảnh hoàng hôn → đêm
-    isNight = true;
-    nightT = (timeProgress - 0.60) / 0.12;
-    skyTop = lerpColor('#c026d3', '#090d16', nightT);
-    skyMid = lerpColor('#f43f5e', '#172554', nightT);
-    skyBot = lerpColor('#fed7aa', '#1e3a8a', nightT);
-    sunMoonColor = lerpColor('#fbbf24', '#f1f5f9', nightT);
-    sunMoonGlow = `rgba(241, 245, 249, ${(0.15 + 0.25 * nightT).toFixed(2)})`;
-    mountainFar = lerpColor('#7e22ce', '#1e293b', nightT);
-    mountainNear = lerpColor('#581c87', '#0f172a', nightT);
-    treeFoliage = lerpColor('#6d28d9', '#064e3b', nightT);
-    grassBright = lerpColor('#a855f7', '#065f46', nightT);
-    grassDark = lerpColor('#6d28d9', '#064e3b', nightT);
-  } else {
-    // Đêm tối
-    isNight = true; nightT = 1;
-    skyTop = '#090d16'; skyMid = '#172554'; skyBot = '#1e3a8a';
-    sunMoonColor = '#f1f5f9'; sunMoonGlow = 'rgba(241, 245, 249, 0.4)';
-    mountainFar = '#1e293b'; mountainNear = '#0f172a';
-    treeFoliage = '#064e3b'; grassBright = '#065f46'; grassDark = '#064e3b';
-  }
-
-  /* ==================== 1. BẦU TRỜI GRADIENT ==================== */
-  const sky = ctx.createLinearGradient(0, 0, 0, GROUND);
-  sky.addColorStop(0, skyTop);
-  sky.addColorStop(0.55, skyMid);
-  sky.addColorStop(1, skyBot);
-  ctx.fillStyle = sky;
-  ctx.fillRect(0, 0, W, GROUND);
-
-  /* ==================== 2. SAO ĐÊM + SAO BĂNG + CỰC QUANG ==================== */
-  if (isNight || nightT > 0) {
-    const starAlphaBase = nightT;
-    // Ngàn sao lấp lánh 3 lớp (sáng, trung bình, mờ)
-    ctx.fillStyle = '#ffffff';
-    for (let i = 0; i < 55; i++) {
-      const sx = (i * 83 + distance * 0.015) % W;
-      const sy = 8 + ((i * 41 + i * i * 7) % (GROUND - 100));
-      const layerR = i < 10 ? 2.2 : i < 25 ? 1.4 : 0.9;
-      const twinkle = 0.35 + 0.65 * Math.abs(Math.sin(distance * 0.025 + i * 1.7));
-      ctx.globalAlpha = Math.max(0.05, starAlphaBase * twinkle);
-      if (i < 5) {
-        // Sao sáng nhất vẽ hình ngôi sao thật
-        ctx.fillStyle = i % 2 === 0 ? '#fef08a' : '#e0f2fe';
-        drawStar(ctx, sx, sy, layerR + 1.5);
-        ctx.fill();
-        ctx.fillStyle = '#ffffff';
-      } else {
-        ctx.beginPath();
-        ctx.arc(sx, sy, layerR, 0, Math.PI * 2);
-        ctx.fill();
-      }
-    }
-    ctx.globalAlpha = 1.0;
-
-    // Sao băng (xuất hiện ngẫu nhiên mỗi ~3 giây)
-    const shootCycle = Math.floor(frame / 180);
-    const shootPhase = (frame % 180) / 180;
-    if (shootPhase < 0.25) {
-      const sx0 = 200 + (shootCycle * 317) % 600;
-      const sy0 = 15 + (shootCycle * 131) % 60;
-      const len = 80 + (shootCycle * 53) % 50;
-      const progress = shootPhase / 0.25;
-      const headX = sx0 + len * progress;
-      const headY = sy0 + len * 0.4 * progress;
-      const tailLen = 45 * Math.min(1, progress * 3);
-      const grad = ctx.createLinearGradient(headX, headY, headX - tailLen, headY - tailLen * 0.4);
-      grad.addColorStop(0, `rgba(255, 255, 255, ${(0.95 * starAlphaBase).toFixed(2)})`);
-      grad.addColorStop(1, 'rgba(255, 255, 255, 0)');
-      ctx.strokeStyle = grad;
-      ctx.lineWidth = 2;
-      ctx.lineCap = 'round';
-      ctx.beginPath();
-      ctx.moveTo(headX, headY);
-      ctx.lineTo(headX - tailLen, headY - tailLen * 0.4);
-      ctx.stroke();
-    }
-
-    // Cực quang (Aurora Borealis) — dải sóng xanh lục mờ ảo uốn lượn
-    if (nightT > 0.5) {
-      const auroraAlpha = (nightT - 0.5) * 0.5;
-      ctx.globalAlpha = auroraAlpha;
-      const auroraColors = ['#22d3ee', '#34d399', '#a78bfa', '#67e8f9'];
-      for (let band = 0; band < 3; band++) {
-        ctx.strokeStyle = auroraColors[band];
-        ctx.lineWidth = 18 - band * 4;
-        ctx.lineCap = 'round';
-        ctx.beginPath();
-        for (let px = 0; px <= W; px += 8) {
-          const ay = 35 + band * 14 + Math.sin(px * 0.006 + distance * 0.004 + band) * 18
-            + Math.sin(px * 0.015 + distance * 0.007) * 8;
-          if (px === 0) ctx.moveTo(px, ay);
-          else ctx.lineTo(px, ay);
-        }
-        ctx.stroke();
-      }
-      ctx.globalAlpha = 1.0;
-    }
-  }
-
-  /* ==================== 3. MẶT TRỜI / MẶT TRĂNG + TIA NẮNG ==================== */
-  const celestialX = 820;
-  const celestialY = 55;
-  // Tia nắng (sun rays) xoay nhẹ lúc ban ngày / hoàng hôn
-  if (!isNight) {
-    ctx.save();
-    ctx.translate(celestialX, celestialY);
-    ctx.rotate(distance * 0.0003);
-    const rayCount = 12;
-    for (let i = 0; i < rayCount; i++) {
-      const angle = (Math.PI * 2 / rayCount) * i;
-      const innerR = 32;
-      const outerR = 65 + Math.sin(distance * 0.02 + i) * 8;
-      const grad = ctx.createLinearGradient(
-        Math.cos(angle) * innerR, Math.sin(angle) * innerR,
-        Math.cos(angle) * outerR, Math.sin(angle) * outerR);
-      grad.addColorStop(0, isSunset ? 'rgba(251, 191, 36, 0.22)' : 'rgba(254, 240, 138, 0.18)');
-      grad.addColorStop(1, 'rgba(254, 240, 138, 0)');
-      ctx.strokeStyle = grad;
-      ctx.lineWidth = 3;
-      ctx.beginPath();
-      ctx.moveTo(Math.cos(angle) * innerR, Math.sin(angle) * innerR);
-      ctx.lineTo(Math.cos(angle) * outerR, Math.sin(angle) * outerR);
-      ctx.stroke();
-    }
-    ctx.restore();
-  }
-  // Hào quang phát sáng nhiều lớp
-  ctx.fillStyle = sunMoonGlow;
-  ctx.beginPath(); ctx.arc(celestialX, celestialY, 52, 0, Math.PI * 2); ctx.fill();
-  if (!isNight) {
-    ctx.fillStyle = isSunset ? 'rgba(251, 146, 60, 0.15)' : 'rgba(254, 240, 138, 0.12)';
-    ctx.beginPath(); ctx.arc(celestialX, celestialY, 70, 0, Math.PI * 2); ctx.fill();
-  }
-  ctx.fillStyle = sunMoonColor;
-  ctx.beginPath(); ctx.arc(celestialX, celestialY, 28, 0, Math.PI * 2); ctx.fill();
-  if (isNight) {
-    // Miệng hố mặt trăng
-    ctx.fillStyle = skyTop;
-    ctx.beginPath(); ctx.arc(celestialX + 10, celestialY - 4, 24, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = 'rgba(200, 200, 200, 0.12)';
-    ctx.beginPath(); ctx.arc(celestialX - 8, celestialY + 6, 5, 0, Math.PI * 2); ctx.fill();
-    ctx.beginPath(); ctx.arc(celestialX - 2, celestialY - 8, 3, 0, Math.PI * 2); ctx.fill();
-  }
-
-  // Cầu vồng mờ sau mưa (xuất hiện ngẫu nhiên trong chu kỳ)
-  if (timeProgress > 0.10 && timeProgress < 0.25) {
-    const rainbowAlpha = Math.sin((timeProgress - 0.10) / 0.15 * Math.PI) * 0.18;
-    const rainbowColors = ['#ef4444', '#f97316', '#eab308', '#22c55e', '#3b82f6', '#6366f1', '#8b5cf6'];
-    for (let i = 0; i < rainbowColors.length; i++) {
-      ctx.strokeStyle = rainbowColors[i];
-      ctx.globalAlpha = rainbowAlpha;
-      ctx.lineWidth = 4;
-      ctx.beginPath();
-      ctx.arc(450, GROUND + 120, 230 + i * 5, Math.PI * 1.05, Math.PI * 1.95);
-      ctx.stroke();
-    }
-    ctx.globalAlpha = 1.0;
-  }
-
-  /* ==================== 4. MÂY TRÔI 3D (có bóng đổ) ==================== */
-  const clouds = [
-    { x: 80, y: 55, s: 1.0 },
-    { x: 310, y: 32, s: 1.3 },
-    { x: 540, y: 68, s: 0.85 },
-    { x: 750, y: 42, s: 1.15 },
-    { x: 920, y: 58, s: 0.75 },
-  ];
-  for (const c of clouds) {
-    const cx = (((c.x - distance * 0.09) % (W + 300)) + W + 300) % (W + 300) - 150;
-    const cy = c.y;
-    const s = c.s;
-    // Bóng mây mờ
-    ctx.fillStyle = isNight ? 'rgba(0, 0, 0, 0.08)' : 'rgba(0, 0, 0, 0.06)';
-    ctx.beginPath();
-    ctx.ellipse(cx + 3, cy + 5, 38 * s, 14 * s, 0, 0, Math.PI * 2);
-    ctx.ellipse(cx - 21 * s, cy + 9, 20 * s, 10 * s, 0, 0, Math.PI * 2);
-    ctx.ellipse(cx + 29 * s, cy + 9, 22 * s, 11 * s, 0, 0, Math.PI * 2);
-    ctx.fill();
-    // Mây chính
-    ctx.fillStyle = isNight ? 'rgba(255, 255, 255, 0.12)' : 'rgba(255, 255, 255, 0.88)';
-    ctx.beginPath();
-    ctx.ellipse(cx, cy, 38 * s, 16 * s, 0, 0, Math.PI * 2);
-    ctx.ellipse(cx - 24 * s, cy + 4 * s, 22 * s, 12 * s, 0, 0, Math.PI * 2);
-    ctx.ellipse(cx + 26 * s, cy + 4 * s, 24 * s, 13 * s, 0, 0, Math.PI * 2);
-    ctx.fill();
-    // Viền sáng đỉnh mây (highlight)
-    if (!isNight) {
-      ctx.fillStyle = 'rgba(255, 255, 255, 0.55)';
-      ctx.beginPath();
-      ctx.ellipse(cx + 4, cy - 6 * s, 22 * s, 8 * s, 0, 0, Math.PI * 2);
-      ctx.fill();
-    }
-  }
-
-  /* ==================== 5. BẦY CHIM BAY (ban ngày / hoàng hôn) ==================== */
-  if (!isNight) {
-    const birdColor = isSunset ? '#581c87' : '#1e293b';
-    ctx.strokeStyle = birdColor;
-    ctx.lineWidth = 1.8;
-    ctx.lineCap = 'round';
-    const birdData = [
-      { ox: 150, oy: 38, count: 4, gap: 22 },
-      { ox: 600, oy: 55, count: 3, gap: 18 },
-    ];
-    for (const flock of birdData) {
-      const fx = (((flock.ox - distance * 0.12) % (W + 200)) + W + 200) % (W + 200) - 100;
-      for (let b = 0; b < flock.count; b++) {
-        const bx = fx + b * flock.gap + Math.sin(frame * 0.06 + b) * 3;
-        const by = flock.oy + Math.sin(frame * 0.08 + b * 1.5) * 4 + b * 3;
-        const wingFlap = Math.sin(frame * 0.18 + b * 2) * 5;
-        ctx.beginPath();
-        ctx.moveTo(bx - 6, by + wingFlap);
-        ctx.quadraticCurveTo(bx, by - 2, bx + 6, by + wingFlap);
-        ctx.stroke();
-      }
-    }
-  }
-
-  /* ==================== 6. DÃY NÚI XA (Parallax lớp 1) — có tuyết đỉnh ==================== */
-  const farOff = (distance * 0.18) % 480;
-  ctx.fillStyle = mountainFar;
-  for (let x = -480 - farOff; x < W + 480; x += 480) {
-    ctx.beginPath();
-    ctx.moveTo(x, GROUND);
-    ctx.lineTo(x + 160, GROUND - 118);
-    ctx.lineTo(x + 240, GROUND - 80);
-    ctx.lineTo(x + 320, GROUND - 105);
-    ctx.lineTo(x + 420, GROUND - 55);
-    ctx.lineTo(x + 480, GROUND);
-    ctx.closePath();
-    ctx.fill();
-    // Tuyết đỉnh núi
-    if (!isNight) {
-      ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
-      ctx.beginPath();
-      ctx.moveTo(x + 148, GROUND - 108);
-      ctx.lineTo(x + 160, GROUND - 118);
-      ctx.lineTo(x + 172, GROUND - 108);
-      ctx.closePath();
-      ctx.fill();
-      ctx.beginPath();
-      ctx.moveTo(x + 310, GROUND - 96);
-      ctx.lineTo(x + 320, GROUND - 105);
-      ctx.lineTo(x + 330, GROUND - 96);
-      ctx.closePath();
-      ctx.fill();
-      ctx.fillStyle = mountainFar;
-    }
-  }
-
-  /* ==================== 7. ĐỒI + CÂY CHI TIẾT (Parallax lớp 2) ==================== */
-  const nearOff = (distance * 0.42) % 400;
-  ctx.fillStyle = mountainNear;
-  for (let x = -400 - nearOff; x < W + 400; x += 400) {
-    ctx.beginPath();
-    ctx.moveTo(x, GROUND);
-    ctx.quadraticCurveTo(x + 100, GROUND - 80, x + 200, GROUND - 92);
-    ctx.quadraticCurveTo(x + 300, GROUND - 70, x + 400, GROUND);
-    ctx.closePath();
-    ctx.fill();
-
-    // Cây chi tiết (thân + tán lá nhiều lớp)
-    const trees = [
-      { tx: x + 90, th: 45, tw: 18 },
-      { tx: x + 160, th: 55, tw: 22 },
-      { tx: x + 250, th: 38, tw: 16 },
-      { tx: x + 340, th: 42, tw: 17 },
-    ];
-    for (const tree of trees) {
-      const treeBaseY = GROUND - 12;
-      // Thân cây
-      ctx.fillStyle = isNight ? '#3f2b1a' : '#92400e';
-      ctx.fillRect(tree.tx - 3, treeBaseY - tree.th + 15, 6, tree.th - 12);
-      // Tán lá 3 lớp tròn xếp chồng
-      ctx.fillStyle = treeFoliage;
-      ctx.beginPath();
-      ctx.arc(tree.tx, treeBaseY - tree.th + 8, tree.tw * 0.55, 0, Math.PI * 2);
-      ctx.arc(tree.tx - 6, treeBaseY - tree.th + 16, tree.tw * 0.5, 0, Math.PI * 2);
-      ctx.arc(tree.tx + 7, treeBaseY - tree.th + 14, tree.tw * 0.48, 0, Math.PI * 2);
-      ctx.fill();
-      // Highlight lá sáng
-      if (!isNight) {
-        ctx.fillStyle = 'rgba(255, 255, 255, 0.12)';
-        ctx.beginPath();
-        ctx.arc(tree.tx + 2, treeBaseY - tree.th + 4, tree.tw * 0.32, 0, Math.PI * 2);
-        ctx.fill();
-      }
-    }
-  }
-
-  /* ==================== 8. TÒA NHÀ HUMG CHI TIẾT ==================== */
-  const humgOff = (distance * 0.3) % 900;
-  for (let x = -900 - humgOff; x < W + 900; x += 900) {
-    if (x + 320 < -120 || x + 320 > W + 120) continue;
-    // Tòa nhà chính
-    ctx.fillStyle = isNight ? '#1e293b' : '#94a3b8';
-    roundRect(ctx, x + 380, GROUND - 95, 85, 95, 4);
-    ctx.fill();
-    // Tháp clock tower
-    roundRect(ctx, x + 405, GROUND - 128, 34, 33, 3);
-    ctx.fill();
-    // Đỉnh mái tam giác
-    ctx.beginPath();
-    ctx.moveTo(x + 405, GROUND - 128);
-    ctx.lineTo(x + 422, GROUND - 142);
-    ctx.lineTo(x + 439, GROUND - 128);
-    ctx.closePath();
-    ctx.fill();
-    // Mặt đồng hồ
-    ctx.fillStyle = isNight ? '#fef08a' : '#f8fafc';
-    ctx.beginPath();
-    ctx.arc(x + 422, GROUND - 115, 8, 0, Math.PI * 2);
-    ctx.fill();
-    ctx.strokeStyle = isNight ? '#ca8a04' : '#475569';
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.moveTo(x + 422, GROUND - 115);
-    const hourAngle = (frame * 0.002) % (Math.PI * 2);
-    ctx.lineTo(x + 422 + Math.cos(hourAngle) * 5, GROUND - 115 + Math.sin(hourAngle) * 5);
-    ctx.stroke();
-    // Cửa sổ sáng đèn 3 tầng
-    for (let row = 0; row < 3; row++) {
-      for (let col = 0; col < 4; col++) {
-        const winOn = isNight ? ((row + col + Math.floor(frame / 120)) % 3 !== 0) : true;
-        ctx.fillStyle = isNight
-          ? (winOn ? '#fef08a' : '#1e293b')
-          : '#f8fafc';
-        ctx.fillRect(x + 390 + col * 18, GROUND - 84 + row * 24, 10, 14);
-      }
-    }
-    // Biển trường "HUMG"
-    ctx.fillStyle = isNight ? 'rgba(254, 240, 138, 0.6)' : 'rgba(15, 23, 42, 0.6)';
-    ctx.font = 'bold 7px sans-serif';
-    ctx.textAlign = 'center';
-    ctx.fillText('HUMG', x + 422, GROUND - 5);
-  }
-
-  /* ==================== 9. CỎ LAU RUNG NHẸ VIỀN ĐƯỜNG ==================== */
-  const grassGrad = ctx.createLinearGradient(0, GROUND - 8, 0, GROUND);
-  grassGrad.addColorStop(0, grassBright);
-  grassGrad.addColorStop(1, grassDark);
-  ctx.fillStyle = grassGrad;
-  ctx.fillRect(0, GROUND - 7, W, 7);
-
-  // Ngọn cỏ lau mảnh lay theo gió
-  ctx.strokeStyle = grassBright;
-  ctx.lineWidth = 1.5;
-  ctx.lineCap = 'round';
-  const grassOff = (distance * 1.0) % 24;
-  for (let gx = -24 - grassOff; gx < W + 24; gx += 24) {
-    const windSway = Math.sin(gx * 0.15 + frame * 0.06) * 4;
-    const bladeH = 8 + (gx * 7 + 11) % 6;
-    ctx.beginPath();
-    ctx.moveTo(gx, GROUND - 6);
-    ctx.quadraticCurveTo(gx + windSway * 0.5, GROUND - 6 - bladeH * 0.6, gx + windSway, GROUND - 6 - bladeH);
-    ctx.stroke();
-  }
-
-  /* ==================== 10. ĐƯỜNG CHẠY TARTAN CHUYÊN NGHIỆP ==================== */
-  const track = ctx.createLinearGradient(0, GROUND, 0, H);
-  track.addColorStop(0, '#c2410c');
-  track.addColorStop(0.15, '#b45309');
-  track.addColorStop(0.5, '#9a3412');
-  track.addColorStop(1, '#7c2d12');
-  ctx.fillStyle = track;
-  ctx.fillRect(0, GROUND, W, H - GROUND);
-
-  // Họa tiết hạt cao su tartan (chấm nhỏ mô phỏng texture)
-  ctx.fillStyle = 'rgba(0, 0, 0, 0.06)';
-  const texOff = (distance * 1.0) % 16;
-  for (let ty = GROUND + 4; ty < H; ty += 8) {
-    for (let tx = -16 - texOff; tx < W + 16; tx += 16) {
-      ctx.fillRect(tx + ((ty * 3) % 7), ty, 2, 2);
-    }
-  }
-
-  // Vạch biên trắng phản quang kép (2 vạch)
-  ctx.fillStyle = '#ffffff';
-  ctx.fillRect(0, GROUND, W, 3);
-  ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
-  ctx.fillRect(0, GROUND + 5, W, 1);
-
-  // Số làn chạy
-  const laneOff = (distance * 1.0) % 500;
-  ctx.fillStyle = 'rgba(255, 255, 255, 0.25)';
-  ctx.font = 'bold 18px sans-serif';
-  ctx.textAlign = 'center';
-  for (let lx = -500 - laneOff; lx < W + 500; lx += 500) {
-    ctx.fillText('1', lx + 200, GROUND + 22);
-    ctx.fillText('2', lx + 200, GROUND + 48);
-  }
-
-  // Làn phân cách nét đứt
-  ctx.fillStyle = 'rgba(255, 255, 255, 0.65)';
-  const dashOff = (distance * 1.0) % 140;
-  for (let i = 0; i < 9; i++) {
-    ctx.fillRect(i * 140 - dashOff, GROUND + 29, 65, 3);
-  }
-
-  /* ==================== 11. CỘT MỐC CỰ LY + CỜ PHƯỚN + BIỂN QC ==================== */
-  // Cột mốc cự ly
-  const postDist = 580;
-  const postOff = (distance * 1.0) % postDist;
-  const currKm = Math.floor(distance / postDist) * 100;
-  for (let x = -postDist - postOff; x < W + postDist; x += postDist) {
-    if (x > -80 && x < W + 80) {
-      // Cột trắng bo góc
-      ctx.fillStyle = '#f8fafc';
-      roundRect(ctx, x + 120, GROUND - 35, 26, 35, 3);
-      ctx.fill();
-      // Đầu đỏ
-      ctx.fillStyle = '#ef4444';
-      roundRect(ctx, x + 120, GROUND - 35, 26, 9, 3);
-      ctx.fill();
-      // Số mét
-      ctx.fillStyle = '#0f172a';
-      ctx.font = 'bold 9px sans-serif';
-      ctx.textAlign = 'center';
-      ctx.fillText(`${Math.max(100, currKm)}m`, x + 133, GROUND - 12);
-    }
-  }
-
-  // Cờ phướn cổ vũ (2 kiểu luân phiên)
-  const bannerOff = (distance * 1.0) % 1100;
-  for (let x = -1100 - bannerOff; x < W + 1100; x += 1100) {
-    if (x > -150 && x < W + 150) {
-      // Cột cờ metallic
-      const gradPole = ctx.createLinearGradient(x + 280, 0, x + 284, 0);
-      gradPole.addColorStop(0, '#94a3b8');
-      gradPole.addColorStop(0.5, '#cbd5e1');
-      gradPole.addColorStop(1, '#94a3b8');
-      ctx.fillStyle = gradPole;
-      ctx.fillRect(x + 280, GROUND - 72, 4, 72);
-      // Quả cầu đầu cột
-      ctx.fillStyle = '#fbbf24';
-      ctx.beginPath(); ctx.arc(x + 282, GROUND - 72, 4, 0, Math.PI * 2); ctx.fill();
-      // Lá cờ phấp phới (wave nhiều điểm)
-      const t = distance * 0.08;
-      ctx.fillStyle = '#f97316';
-      ctx.beginPath();
-      ctx.moveTo(x + 284, GROUND - 70);
-      for (let px = 0; px <= 54; px += 6) {
-        const wy = Math.sin(t + px * 0.12) * 3 + Math.sin(t * 1.5 + px * 0.08) * 1.5;
-        ctx.lineTo(x + 284 + px, GROUND - 70 + wy);
-      }
-      for (let px = 54; px >= 0; px -= 6) {
-        const wy = Math.sin(t + px * 0.12) * 3 + Math.sin(t * 1.5 + px * 0.08) * 1.5;
-        ctx.lineTo(x + 284 + px, GROUND - 46 + wy);
-      }
-      ctx.closePath();
-      ctx.fill();
-      ctx.fillStyle = '#ffffff';
-      ctx.font = 'bold 8px sans-serif';
-      ctx.textAlign = 'center';
-      const textWave = Math.sin(t) * 1.5;
-      ctx.fillText('GEOENV', x + 311, GROUND - 55 + textWave);
-      ctx.font = '6px sans-serif';
-      ctx.fillText('RUN 2026', x + 311, GROUND - 48 + textWave);
-    }
-  }
-
-  // Biển quảng cáo nhà tài trợ dọc đường
-  const adOff = (distance * 1.0) % 1600;
-  for (let x = -1600 - adOff; x < W + 1600; x += 1600) {
-    if (x + 50 > -100 && x + 50 < W + 100) {
-      ctx.fillStyle = 'rgba(255, 255, 255, 0.85)';
-      roundRect(ctx, x + 50, GROUND - 52, 110, 28, 4);
-      ctx.fill();
-      ctx.strokeStyle = '#e2e8f0';
-      ctx.lineWidth = 1;
-      ctx.stroke();
-      ctx.fillStyle = '#0284c7';
-      ctx.font = 'bold 9px sans-serif';
-      ctx.textAlign = 'center';
-      ctx.fillText('🏫 ĐH MỎ - ĐỊA CHẤT', x + 105, GROUND - 35);
-      ctx.fillStyle = '#475569';
-      ctx.font = '7px sans-serif';
-      ctx.fillText('HUMG • Khoa Môi trường', x + 105, GROUND - 27);
-    }
-  }
-
-  /* ==================== 12. HÀNG RÀO + KHÁN GIẢ CỔ VŨ ==================== */
-  // Hàng rào barrier
-  const barrierOff = (distance * 1.0) % 140;
-  ctx.fillStyle = 'rgba(100, 116, 139, 0.4)';
-  for (let bx = -140 - barrierOff; bx < W + 140; bx += 140) {
-    // Trụ rào
-    ctx.fillRect(bx + 10, GROUND - 30, 3, 30);
-    ctx.fillRect(bx + 50, GROUND - 30, 3, 30);
-    // Thanh ngang
-    ctx.fillRect(bx + 10, GROUND - 28, 43, 2);
-    ctx.fillRect(bx + 10, GROUND - 18, 43, 2);
-  }
-
-  // Khán giả cổ vũ ngoài rào (chỉ vẽ đầu + tay vẫy)
-  const specOff = (distance * 0.25) % 120;
-  const specColors = ['#ef4444', '#3b82f6', '#22c55e', '#f59e0b', '#8b5cf6', '#ec4899'];
-  for (let sx = -120 - specOff; sx < W + 120; sx += 60) {
-    const ci = Math.abs(Math.floor(sx * 0.017)) % specColors.length;
-    const specY = GROUND - 38;
-    const wave = Math.sin(frame * 0.12 + sx * 0.05) * 3;
-    // Đầu tròn
-    ctx.fillStyle = '#fcd34d';
-    ctx.beginPath(); ctx.arc(sx + 28, specY - 2, 5, 0, Math.PI * 2); ctx.fill();
-    // Thân áo
-    ctx.fillStyle = specColors[ci];
-    ctx.fillRect(sx + 24, specY + 3, 8, 8);
-    // Tay vẫy
-    ctx.strokeStyle = specColors[ci];
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.moveTo(sx + 26, specY + 5);
-    ctx.lineTo(sx + 20, specY - 2 + wave);
-    ctx.moveTo(sx + 30, specY + 5);
-    ctx.lineTo(sx + 36, specY - 2 - wave);
-    ctx.stroke();
-  }
-
-  /* ==================== 13. ĐOM ĐÓM ĐÊM LUNG LINH ==================== */
-  if (isNight && nightT > 0.4) {
-    const ffAlpha = (nightT - 0.4) * 1.2;
-    for (let i = 0; i < 12; i++) {
-      const fx = (i * 113 + frame * 0.3) % W;
-      const fy = GROUND - 40 - (i * 31) % 80;
-      const brightness = 0.4 + 0.6 * Math.abs(Math.sin(frame * 0.04 + i * 2.3));
-      ctx.globalAlpha = ffAlpha * brightness;
-      ctx.fillStyle = '#fef08a';
-      ctx.beginPath(); ctx.arc(fx, fy, 2.5, 0, Math.PI * 2); ctx.fill();
-      // Hào quang đom đóm
-      ctx.fillStyle = 'rgba(254, 240, 138, 0.3)';
-      ctx.beginPath(); ctx.arc(fx, fy, 6, 0, Math.PI * 2); ctx.fill();
-    }
-    ctx.globalAlpha = 1.0;
-  }
-}
-
-/* =========================================================================
-   HỆ THỐNG VẼ VẬN ĐỘNG VIÊN (RUNNER ANIMATION RIG) V3
-   - Chu kỳ chạy 8 bước mượt (sine interpolation)
-   - Dải ruy băng bandana & tóc bay theo gió
-   - Giọt mồ hôi bay ngược khi chạy nhanh
-   - Biểu cảm khuôn mặt (bình thường / quyết tâm / chóng mặt)
-   - Dáng cúi trượt với vệt lửa ma sát
-   - Nhảy kép với vòng sóng không trung
-   - Bóng đổ mềm & hào quang shield/booster nhiều lớp
-   ========================================================================= */
-
-function drawRunner(
+function ellipse(
   ctx: CanvasRenderingContext2D,
+  x: number,
   y: number,
-  frame: number,
-  airborne: boolean,
-  sliding: boolean,
-  hasShield: boolean,
-  hasBooster: boolean,
-  isOver: boolean,
-  speed: number,
+  rx: number,
+  ry: number,
 ) {
-  ctx.save();
-
-  // 1. Bóng đổ gradient mềm dưới mặt đất
-  const heightAbove = GROUND - RUNNER_H - y;
-  const shadowScale = sliding ? 1.3 : Math.max(0.25, 1 - heightAbove / 260);
-  const shadowAlpha = sliding ? 0.38 : Math.max(0.1, 0.3 * (1 - heightAbove / 300));
-  const shadowGrad = ctx.createRadialGradient(
-    RUNNER_X + (sliding ? 22 : 18), GROUND + 3, 0,
-    RUNNER_X + (sliding ? 22 : 18), GROUND + 3, (sliding ? 30 : 24) * shadowScale,
-  );
-  shadowGrad.addColorStop(0, `rgba(0, 0, 0, ${shadowAlpha})`);
-  shadowGrad.addColorStop(1, 'rgba(0, 0, 0, 0)');
-  ctx.fillStyle = shadowGrad;
   ctx.beginPath();
-  ctx.ellipse(
-    RUNNER_X + (sliding ? 22 : 18), GROUND + 3,
-    (sliding ? 30 : 24) * shadowScale,
-    (sliding ? 5 : 5.5) * shadowScale,
-    0, 0, Math.PI * 2,
-  );
+  ctx.ellipse(x, y, rx, ry, 0, 0, Math.PI * 2);
+}
+
+/* ---------------- Nhân vật: rig xương khớp thủ tục --------------------- */
+interface RunnerPose {
+  top: number;
+  runCycle: number;
+  lean: number;
+  squashX: number;
+  squashY: number;
+  flip: number;
+  sliding: boolean;
+  airborne: boolean;
+}
+
+function drawRunner(ctx: CanvasRenderingContext2D, p: RunnerPose) {
+  const cx = RUNNER_X + 18;
+  const feetY = p.top + RUNNER_H;
+  const heightAbove = Math.max(0, GROUND - RUNNER_H - p.top);
+
+  /* Bóng đổ elip mềm: càng cao càng nhỏ và càng mờ. */
+  const shScale = Math.max(0.3, 1 - heightAbove / 300);
+  ctx.fillStyle = `rgba(15, 23, 42, ${0.28 * shScale})`;
+  ellipse(ctx, cx, GROUND + 4, 22 * shScale, 4.5 * shScale);
   ctx.fill();
 
-  // 2. Vệt hào quang năng lượng nếu Booster
-  if (hasBooster) {
-    // Vệt bóng ghost trail nhiều lớp
-    for (let gi = 3; gi >= 1; gi--) {
-      ctx.fillStyle = `rgba(250, 204, 21, ${0.08 * gi})`;
-      ctx.beginPath();
-      ctx.ellipse(RUNNER_X + 18 - gi * 12, y + 25 + gi, 22 - gi * 2, 20 - gi, 0, 0, Math.PI * 2);
-      ctx.fill();
-    }
-    // Hào quang sáng chính
-    const pulseB = Math.sin(frame * 0.2) * 3;
-    ctx.fillStyle = 'rgba(250, 204, 21, 0.2)';
-    ctx.beginPath();
-    ctx.ellipse(RUNNER_X + 18, y + 25, 36 + pulseB, 30 + pulseB, 0, 0, Math.PI * 2);
-    ctx.fill();
+  ctx.save();
+  ctx.translate(cx, feetY);
+  ctx.rotate(p.lean);
+  ctx.scale(p.squashX, p.squashY);
+  ctx.translate(0, -RUNNER_H);
+  /* Lộn vòng nhảy kép: xoay quanh tâm thân. */
+  if (p.flip !== 0) {
+    ctx.translate(18, 25);
+    ctx.rotate(p.flip);
+    ctx.translate(-18, -25);
   }
+  const hip = { x: 18, y: 32 };
+  const shoulder = { x: 18, y: 17 };
+  const phase = p.sliding ? 0 : p.runCycle;
+  const swingA = Math.sin(phase) * 13;
+  const swingB = Math.sin(phase + Math.PI) * 13;
+  const liftA = Math.max(0, Math.cos(phase)) * 7;
+  const liftB = Math.max(0, Math.cos(phase + Math.PI)) * 7;
 
-  // ============ 3. TƯ THẾ TRƯỢT NGƯỜI (SLIDE) ============
-  if (sliding) {
-    const slideY = GROUND - 24;
+  ctx.lineCap = 'round';
+  ctx.lineJoin = 'round';
 
-    // Vệt lửa ma sát trượt lướt (tia sáng cam)
-    ctx.strokeStyle = 'rgba(249, 115, 22, 0.5)';
-    ctx.lineWidth = 2;
-    for (let fi = 0; fi < 4; fi++) {
-      const fx = RUNNER_X + 36 + fi * 3;
-      const fy = slideY + 18;
-      const fLen = 8 + Math.random() * 6;
-      ctx.beginPath();
-      ctx.moveTo(fx, fy);
-      ctx.lineTo(fx + fLen, fy - 2 - Math.random() * 3);
-      ctx.stroke();
-    }
-
-    // Chân trượt dài
-    ctx.strokeStyle = '#1e3a5f';
-    ctx.lineWidth = 7;
-    ctx.lineCap = 'round';
-    ctx.beginPath();
-    ctx.moveTo(RUNNER_X + 2, slideY + 12);
-    ctx.lineTo(RUNNER_X + 38, slideY + 16);
-    ctx.stroke();
-
-    // Giày chạy
-    ctx.fillStyle = '#ea580c';
-    roundRect(ctx, RUNNER_X + 35, slideY + 12, 12, 7, 2);
+  if (p.sliding) {
+    /* Tư thế trượt: thân gần như nằm ngang, chân duỗi về trước. */
+    const grad = ctx.createLinearGradient(0, 8, 0, 30);
+    grad.addColorStop(0, '#3b82f6');
+    grad.addColorStop(1, '#1e40af');
+    ctx.fillStyle = grad;
+    roundRectPath(ctx, 2, 16, 34, 13, 6);
     ctx.fill();
-    ctx.fillStyle = '#ffffff';
-    ctx.fillRect(RUNNER_X + 37, slideY + 17, 8, 2);
-
-    // Thân áo
-    ctx.fillStyle = '#0284c7';
-    roundRect(ctx, RUNNER_X + 6, slideY - 2, 28, 16, 5);
-    ctx.fill();
-    // Sọc ngang áo thể thao
-    ctx.fillStyle = '#0369a1';
-    ctx.fillRect(RUNNER_X + 6, slideY + 6, 28, 3);
-
-    // BIB 2026
-    ctx.fillStyle = '#ffffff';
-    roundRect(ctx, RUNNER_X + 14, slideY, 12, 10, 1);
-    ctx.fill();
-    ctx.fillStyle = '#0284c7';
-    ctx.font = 'bold 7px sans-serif';
-    ctx.textAlign = 'center';
-    ctx.fillText('2026', RUNNER_X + 20, slideY + 7);
-
-    // Tay chống phong cách
-    ctx.strokeStyle = '#1e3a5f';
-    ctx.lineWidth = 5;
-    ctx.beginPath();
-    ctx.moveTo(RUNNER_X + 12, slideY + 4);
-    ctx.lineTo(RUNNER_X - 2, slideY + 14);
-    ctx.stroke();
-    // Bàn tay
-    ctx.fillStyle = '#fcd34d';
-    ctx.beginPath(); ctx.arc(RUNNER_X - 2, slideY + 14, 3, 0, Math.PI * 2); ctx.fill();
-
-    // Đầu
-    ctx.fillStyle = '#fcd34d';
-    ctx.beginPath(); ctx.arc(RUNNER_X + 34, slideY - 4, 9, 0, Math.PI * 2); ctx.fill();
-    // Mắt quyết tâm (nheo lại)
-    ctx.fillStyle = '#0f172a';
-    ctx.fillRect(RUNNER_X + 36, slideY - 6, 4, 2);
-    // Miệng nghiến răng
-    ctx.strokeStyle = '#0f172a';
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.moveTo(RUNNER_X + 37, slideY - 1);
-    ctx.lineTo(RUNNER_X + 40, slideY - 1);
-    ctx.stroke();
-
-    // Headband + ribbon
-    ctx.fillStyle = '#ef4444';
-    ctx.fillRect(RUNNER_X + 26, slideY - 8, 14, 4);
-    const bandWave = Math.sin(frame * 0.4) * 4;
-    ctx.fillStyle = '#dc2626';
-    ctx.beginPath();
-    ctx.moveTo(RUNNER_X + 26, slideY - 7);
-    ctx.quadraticCurveTo(RUNNER_X + 14, slideY - 9 + bandWave, RUNNER_X + 4, slideY - 6 + bandWave);
-    ctx.lineTo(RUNNER_X + 4, slideY - 3 + bandWave);
-    ctx.quadraticCurveTo(RUNNER_X + 14, slideY - 5 + bandWave, RUNNER_X + 26, slideY - 4);
-    ctx.closePath();
-    ctx.fill();
-
-    ctx.restore();
-    return;
-  }
-
-  // ============ 4. TƯ THẾ GAME OVER (VẤP NGÃ) ============
-  if (isOver) {
-    const tumbleY = GROUND - 26;
-    ctx.translate(RUNNER_X + 18, tumbleY);
-    const tumbleAngle = Math.min(0.65, (frame % 30) * 0.022 + 0.3);
-    ctx.rotate(tumbleAngle);
-
-    // Chân giơ lên
     ctx.strokeStyle = '#1e3a5f';
     ctx.lineWidth = 6;
-    ctx.lineCap = 'round';
     ctx.beginPath();
-    ctx.moveTo(0, 10);
-    ctx.lineTo(-18, -12);
-    ctx.moveTo(4, 10);
-    ctx.lineTo(-8, -20);
+    ctx.moveTo(30, 22);
+    ctx.lineTo(48, 30);
+    ctx.moveTo(30, 26);
+    ctx.lineTo(46, 36);
     ctx.stroke();
-    // Giày
-    ctx.fillStyle = '#ea580c';
-    ctx.fillRect(-20, -14, 8, 5);
-    ctx.fillRect(-10, -22, 8, 5);
-
-    // Thân áo
-    ctx.fillStyle = '#0284c7';
-    roundRect(ctx, -10, -6, 22, 20, 6);
+    ctx.fillStyle = '#f97316';
+    roundRectPath(ctx, 46, 28, 11, 5, 2);
     ctx.fill();
-
-    // Đầu
-    ctx.fillStyle = '#fcd34d';
-    ctx.beginPath(); ctx.arc(8, -18, 9, 0, Math.PI * 2); ctx.fill();
-
-    // Mắt xoáy xoáy chóng mặt (2 vòng tròn xoay)
-    ctx.strokeStyle = '#0f172a';
-    ctx.lineWidth = 1.5;
-    const dizzy1 = frame * 0.3;
-    const dizzy2 = frame * 0.3 + Math.PI;
+    roundRectPath(ctx, 44, 34, 11, 5, 2);
+    ctx.fill();
+    ctx.fillStyle = '#f2c79b';
     ctx.beginPath();
-    ctx.arc(5, -20, 3, dizzy1, dizzy1 + Math.PI * 1.5);
-    ctx.stroke();
-    ctx.beginPath();
-    ctx.arc(11, -20, 3, dizzy2, dizzy2 + Math.PI * 1.5);
-    ctx.stroke();
-
-    // Miệng há hốc
-    ctx.fillStyle = '#0f172a';
-    ctx.beginPath(); ctx.ellipse(8, -14, 3, 2, 0, 0, Math.PI * 2); ctx.fill();
-
-    // Sao bay vòng quanh đầu
-    ctx.fillStyle = '#fbbf24';
-    for (let si = 0; si < 3; si++) {
-      const sa = frame * 0.12 + si * (Math.PI * 2 / 3);
-      const starX = 8 + Math.cos(sa) * 14;
-      const starY = -22 + Math.sin(sa) * 6;
-      drawStar(ctx, starX, starY, 3);
-      ctx.fill();
-    }
-
+    ctx.arc(8, 14, 8, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#ef4444';
+    ctx.fillRect(1, 8, 14, 4);
     ctx.restore();
     return;
   }
 
-  // ============ 5. TƯ THẾ CHẠY / NHẢY ============
-  const hipY = y + 36;
-  // Nội suy mượt giữa các bước (sine curve)
-  const rawPhase = (frame % 32) / 32;
-  const smoothSwing = Math.sin(rawPhase * Math.PI * 2) * 18;
-  const swing = airborne ? 14 : smoothSwing;
-  const backSwing = airborne ? -12 : -smoothSwing;
-
-  // Chân sau + đầu gối (2 đoạn)
-  ctx.strokeStyle = '#1e3a5f';
+  /* Chân xa + tay xa (tối hơn một tông). */
+  ctx.strokeStyle = '#172554';
   ctx.lineWidth = 6;
-  ctx.lineCap = 'round';
-  const kneeBackX = RUNNER_X + 19 + backSwing * 0.5;
-  const kneeBackY = y + 42;
   ctx.beginPath();
-  ctx.moveTo(RUNNER_X + 19, hipY);
-  ctx.lineTo(kneeBackX, kneeBackY);
-  ctx.lineTo(RUNNER_X + 19 + backSwing, y + 49);
+  ctx.moveTo(hip.x, hip.y);
+  ctx.lineTo(hip.x + swingB * 0.6, hip.y + 10);
+  ctx.lineTo(hip.x + swingB, 48 - liftB);
+  ctx.stroke();
+  ctx.strokeStyle = '#172554';
+  ctx.lineWidth = 5;
+  ctx.beginPath();
+  ctx.moveTo(shoulder.x, shoulder.y);
+  ctx.lineTo(shoulder.x + swingA * 0.5, shoulder.y + 10);
   ctx.stroke();
 
-  // Giày sau (chi tiết hơn)
-  ctx.fillStyle = '#ea580c';
-  roundRect(ctx, RUNNER_X + 15 + backSwing, y + 47, 11, 5, 2);
-  ctx.fill();
-  ctx.fillStyle = '#ffffff';
-  ctx.fillRect(RUNNER_X + 17 + backSwing, y + 50, 7, 2);
-
-  // Chân trước + đầu gối
-  const kneeFrontX = RUNNER_X + 15 + swing * 0.5;
-  const kneeFrontY = y + 42;
-  ctx.strokeStyle = '#1e3a5f';
+  /* Thân: áo Bib giải chạy, gradient + sọc trắng + số Bib. */
+  const torsoGrad = ctx.createLinearGradient(0, 14, 0, 34);
+  torsoGrad.addColorStop(0, '#38bdf8');
+  torsoGrad.addColorStop(0.55, '#1e5fc4');
+  torsoGrad.addColorStop(1, '#1e3a8a');
+  ctx.fillStyle = torsoGrad;
   ctx.beginPath();
-  ctx.moveTo(RUNNER_X + 15, hipY);
-  ctx.lineTo(kneeFrontX, kneeFrontY);
-  ctx.lineTo(RUNNER_X + 15 + swing, y + 49);
-  ctx.stroke();
-
-  // Giày trước
-  ctx.fillStyle = '#f97316';
-  roundRect(ctx, RUNNER_X + 11 + swing, y + 47, 12, 5, 2);
+  ctx.moveTo(9, 15);
+  ctx.quadraticCurveTo(18, 11, 27, 15);
+  ctx.lineTo(25, 33);
+  ctx.quadraticCurveTo(18, 36, 11, 33);
+  ctx.closePath();
   ctx.fill();
-  ctx.fillStyle = '#ffffff';
-  ctx.fillRect(RUNNER_X + 13 + swing, y + 50, 8, 2);
-
-  // Quần short thể thao
-  ctx.fillStyle = '#0f172a';
-  roundRect(ctx, RUNNER_X + 9, y + 30, 21, 10, 4);
+  ctx.fillStyle = '#f8fafc';
+  roundRectPath(ctx, 13, 20, 10, 9, 2);
   ctx.fill();
-
-  // Thân áo GEOENV xanh thể thao
-  ctx.fillStyle = '#0284c7';
-  roundRect(ctx, RUNNER_X + 7, y + 14, 24, 20, 7);
-  ctx.fill();
-  // Sọc bên sườn áo (chi tiết thể thao)
-  ctx.fillStyle = '#0369a1';
-  ctx.fillRect(RUNNER_X + 7, y + 24, 3, 10);
-  ctx.fillRect(RUNNER_X + 28, y + 24, 3, 10);
-  // Cổ áo
-  ctx.fillStyle = '#0ea5e9';
-  ctx.fillRect(RUNNER_X + 14, y + 13, 10, 3);
-
-  // Số BIB "2026" viền
-  ctx.fillStyle = '#ffffff';
-  roundRect(ctx, RUNNER_X + 12, y + 19, 14, 11, 1);
-  ctx.fill();
-  ctx.fillStyle = '#0284c7';
+  ctx.fillStyle = '#1e5fc4';
   ctx.font = 'bold 7px sans-serif';
   ctx.textAlign = 'center';
-  ctx.fillText('2026', RUNNER_X + 19, y + 27);
+  ctx.fillText('06', 18, 27);
 
-  // Tay sau
+  /* Đầu: da + tóc + băng đô đỏ + mắt. */
+  ctx.fillStyle = '#f2c79b';
+  ctx.beginPath();
+  ctx.arc(19, 8, 8.5, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = '#1e293b';
+  ctx.beginPath();
+  ctx.arc(19, 4.5, 8.5, Math.PI, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = '#ef4444';
+  ctx.fillRect(11, 2.5, 16, 3.5);
+  ctx.fillStyle = '#0f172a';
+  ctx.beginPath();
+  ctx.arc(23, 9, 1.4, 0, Math.PI * 2);
+  ctx.fill();
+
+  /* Tay gần + chân gần, giày đế phát sáng. */
   ctx.strokeStyle = '#1e3a5f';
   ctx.lineWidth = 5;
   ctx.beginPath();
-  ctx.moveTo(RUNNER_X + 11, y + 18);
-  ctx.lineTo(RUNNER_X + 11 + backSwing * 0.85, y + 31);
+  ctx.moveTo(shoulder.x, shoulder.y);
+  ctx.lineTo(shoulder.x + swingB * 0.5, shoulder.y + 10);
   ctx.stroke();
-  // Bàn tay sau
-  ctx.fillStyle = '#fcd34d';
-  ctx.beginPath(); ctx.arc(RUNNER_X + 11 + backSwing * 0.85, y + 31, 2.5, 0, Math.PI * 2); ctx.fill();
-
-  // Tay trước
   ctx.strokeStyle = '#1e3a5f';
+  ctx.lineWidth = 6;
   ctx.beginPath();
-  ctx.moveTo(RUNNER_X + 27, y + 18);
-  ctx.lineTo(RUNNER_X + 27 + swing * 0.85, y + 31);
+  ctx.moveTo(hip.x, hip.y);
+  ctx.lineTo(hip.x + swingA * 0.6, hip.y + 10);
+  ctx.lineTo(hip.x + swingA, 48 - liftA);
   ctx.stroke();
-  ctx.fillStyle = '#fcd34d';
-  ctx.beginPath(); ctx.arc(RUNNER_X + 27 + swing * 0.85, y + 31, 2.5, 0, Math.PI * 2); ctx.fill();
-
-  // Cổ
-  ctx.fillStyle = '#fcd34d';
-  ctx.fillRect(RUNNER_X + 17, y + 11, 4, 5);
-
-  // Đầu
-  ctx.fillStyle = '#fcd34d';
-  ctx.beginPath(); ctx.arc(RUNNER_X + 20, y + 7, 10, 0, Math.PI * 2); ctx.fill();
-
-  // Tai
-  ctx.fillStyle = '#f5c542';
-  ctx.beginPath(); ctx.arc(RUNNER_X + 10, y + 8, 3, 0, Math.PI * 2); ctx.fill();
-
-  // Mái tóc thể thao (có chiều sâu)
-  ctx.fillStyle = '#0f172a';
-  ctx.beginPath();
-  ctx.arc(RUNNER_X + 20, y + 4, 10, Math.PI * 0.85, Math.PI * 2.15);
+  const shoeGlow = ctx.createRadialGradient(
+    hip.x + swingA, 48 - liftA, 1,
+    hip.x + swingA, 48 - liftA, 12,
+  );
+  shoeGlow.addColorStop(0, 'rgba(249, 115, 22, 0.55)');
+  shoeGlow.addColorStop(1, 'rgba(249, 115, 22, 0)');
+  ctx.fillStyle = shoeGlow;
+  ellipse(ctx, hip.x + swingA, 48 - liftA, 12, 6);
   ctx.fill();
-  // Mớ tóc bay
-  ctx.fillStyle = '#1e293b';
-  ctx.beginPath();
-  ctx.moveTo(RUNNER_X + 12, y + 2);
-  ctx.quadraticCurveTo(RUNNER_X + 6, y + 1 + Math.sin(frame * 0.3) * 2, RUNNER_X + 4, y + 4);
-  ctx.lineTo(RUNNER_X + 12, y + 5);
-  ctx.closePath();
+  ctx.fillStyle = '#f97316';
+  roundRectPath(ctx, hip.x + swingA - 2, 46 - liftA, 11, 5, 2);
   ctx.fill();
-
-  // Mắt (nheo khi tốc độ cao, tròn bình thường)
-  if (speed > 10) {
-    // Nheo mắt quyết tâm
-    ctx.strokeStyle = '#0f172a';
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.moveTo(RUNNER_X + 22, y + 5);
-    ctx.lineTo(RUNNER_X + 26, y + 6);
-    ctx.stroke();
-  } else {
-    // Mắt tròn
-    ctx.fillStyle = '#0f172a';
-    ctx.beginPath(); ctx.arc(RUNNER_X + 24, y + 6, 2, 0, Math.PI * 2); ctx.fill();
-    // Tròng mắt sáng
-    ctx.fillStyle = '#ffffff';
-    ctx.beginPath(); ctx.arc(RUNNER_X + 24.5, y + 5.5, 0.8, 0, Math.PI * 2); ctx.fill();
-  }
-
-  // Miệng (mở to khi nhảy, nghiến răng khi nhanh)
-  if (airborne) {
-    ctx.fillStyle = '#0f172a';
-    ctx.beginPath(); ctx.ellipse(RUNNER_X + 24, y + 11, 2, 1.5, 0, 0, Math.PI * 2); ctx.fill();
-  } else if (speed > 10) {
-    ctx.strokeStyle = '#0f172a';
-    ctx.lineWidth = 1.5;
-    ctx.beginPath();
-    ctx.moveTo(RUNNER_X + 23, y + 11);
-    ctx.lineTo(RUNNER_X + 26, y + 10.5);
-    ctx.stroke();
-  } else {
-    ctx.strokeStyle = '#0f172a';
-    ctx.lineWidth = 1.2;
-    ctx.beginPath();
-    ctx.arc(RUNNER_X + 24, y + 10, 2, 0, Math.PI);
-    ctx.stroke();
-  }
-
-  // Má hồng (blush)
-  ctx.fillStyle = 'rgba(248, 113, 113, 0.3)';
-  ctx.beginPath(); ctx.arc(RUNNER_X + 26, y + 9, 2.5, 0, Math.PI * 2); ctx.fill();
-
-  // Băng đô thể thao đỏ
-  ctx.fillStyle = '#ef4444';
-  ctx.fillRect(RUNNER_X + 10, y + 2, 20, 4);
-
-  // Dải ruy băng bay + đuôi ribbon dài hơn
-  const ribbonWave = Math.sin(frame * 0.35) * 5;
-  const ribbonWave2 = Math.sin(frame * 0.5 + 1) * 3;
-  ctx.fillStyle = '#dc2626';
-  ctx.beginPath();
-  ctx.moveTo(RUNNER_X + 10, y + 3);
-  ctx.quadraticCurveTo(RUNNER_X - 4, y + 2 + ribbonWave, RUNNER_X - 16, y + 5 + ribbonWave);
-  ctx.quadraticCurveTo(RUNNER_X - 22, y + 7 + ribbonWave2, RUNNER_X - 26, y + 4 + ribbonWave2);
-  ctx.lineTo(RUNNER_X - 25, y + 8 + ribbonWave2);
-  ctx.quadraticCurveTo(RUNNER_X - 20, y + 10 + ribbonWave2, RUNNER_X - 15, y + 8 + ribbonWave);
-  ctx.quadraticCurveTo(RUNNER_X - 4, y + 6 + ribbonWave, RUNNER_X + 10, y + 7);
-  ctx.closePath();
-  ctx.fill();
-
-  // Giọt mồ hôi bay ngược khi tốc độ cao
-  if (speed > 7 && !airborne) {
-    ctx.fillStyle = 'rgba(56, 189, 248, 0.7)';
-    const sweatPhase = (frame * 0.15) % (Math.PI * 2);
-    const sweatX = RUNNER_X + 8 - Math.sin(sweatPhase) * 8;
-    const sweatY = y + 2 - Math.abs(Math.cos(sweatPhase)) * 10;
-    ctx.beginPath();
-    ctx.moveTo(sweatX, sweatY);
-    ctx.quadraticCurveTo(sweatX - 1.5, sweatY + 3, sweatX, sweatY + 5);
-    ctx.quadraticCurveTo(sweatX + 1.5, sweatY + 3, sweatX, sweatY);
-    ctx.fill();
-    if (speed > 10) {
-      const sw2X = sweatX + 6;
-      const sw2Y = sweatY + 3;
-      ctx.beginPath();
-      ctx.moveTo(sw2X, sw2Y);
-      ctx.quadraticCurveTo(sw2X - 1, sw2Y + 2, sw2X, sw2Y + 3.5);
-      ctx.quadraticCurveTo(sw2X + 1, sw2Y + 2, sw2X, sw2Y);
-      ctx.fill();
-    }
-  }
-
-  // 6. HÀO QUANG KHIÊN BẢO VỆ (SHIELD BUBBLE) — nâng cấp đẹp hơn
-  if (hasShield) {
-    const pulse = Math.sin(frame * 0.15) * 3;
-    const shieldR = 32 + pulse;
-    // Hào quang nhiều lớp gradient
-    const shieldGrad = ctx.createRadialGradient(
-      RUNNER_X + 19, y + 24, shieldR * 0.6,
-      RUNNER_X + 19, y + 24, shieldR,
-    );
-    shieldGrad.addColorStop(0, 'rgba(56, 189, 248, 0.02)');
-    shieldGrad.addColorStop(0.7, 'rgba(56, 189, 248, 0.15)');
-    shieldGrad.addColorStop(1, 'rgba(56, 189, 248, 0.3)');
-    ctx.fillStyle = shieldGrad;
-    ctx.beginPath();
-    ctx.arc(RUNNER_X + 19, y + 24, shieldR, 0, Math.PI * 2);
-    ctx.fill();
-    // Viền sáng
-    ctx.strokeStyle = 'rgba(125, 211, 252, 0.9)';
-    ctx.lineWidth = 2.5;
-    ctx.stroke();
-    // Highlight phản chiếu
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
-    ctx.lineWidth = 1.5;
-    ctx.beginPath();
-    ctx.arc(RUNNER_X + 12, y + 14, shieldR * 0.7, Math.PI * 1.2, Math.PI * 1.7);
-    ctx.stroke();
-
-    // 3 ngôi sao quay quanh khiên
-    for (let si = 0; si < 3; si++) {
-      const sa = frame * 0.08 + si * (Math.PI * 2 / 3);
-      const sx = RUNNER_X + 19 + Math.cos(sa) * (shieldR + 2);
-      const sy = y + 24 + Math.sin(sa) * (shieldR + 2);
-      ctx.fillStyle = '#ffffff';
-      drawStar(ctx, sx, sy, 3);
-      ctx.fill();
-    }
-  }
-
   ctx.restore();
 }
 
-/* =========================================================================
-   HỆ THỐNG VẼ CHƯỚNG NGẠI VẬT & VẬT PHẨM V3
-   - Tất cả chướng ngại vật có bóng đổ mềm
-   - Vật phẩm có hào quang phát sáng (glow) + hiệu ứng xoay/lấp lánh
-   - Chai nước có bọt khí, huy chương có dây đeo, shield có vòng năng lượng
-   ========================================================================= */
-
-function drawObstacle(ctx: CanvasRenderingContext2D, ob: Obstacle, frame: number) {
-  const { w, h, yOffset } = OB_CONFIG[ob.kind];
-  const y = GROUND - yOffset;
-
-  // Bóng đổ mềm cho tất cả chướng ngại vật
-  ctx.fillStyle = 'rgba(0, 0, 0, 0.15)';
+/* Dải ruy băng sau đầu: 10 điểm nối tiếp, sóng sin theo gió, chuyển sắc
+   xanh lá → cam, thuôn dần về cuối. */
+function drawRibbon(ctx: CanvasRenderingContext2D, pts: { x: number; y: number }[]) {
+  if (pts.length < 2) return;
+  const left: { x: number; y: number }[] = [];
+  const right: { x: number; y: number }[] = [];
+  for (let i = 0; i < pts.length; i++) {
+    const wdt = 6.5 * (1 - i / pts.length) + 0.5;
+    left.push({ x: pts[i].x, y: pts[i].y - wdt });
+    right.push({ x: pts[i].x, y: pts[i].y + wdt });
+  }
+  const grad = ctx.createLinearGradient(pts[0].x, 0, pts[pts.length - 1].x, 0);
+  grad.addColorStop(0, '#22c55e');
+  grad.addColorStop(1, '#f97316');
+  ctx.fillStyle = grad;
   ctx.beginPath();
-  ctx.ellipse(ob.x + w / 2 + 3, GROUND + 2, w / 2 + 4, 4, 0, 0, Math.PI * 2);
+  ctx.moveTo(left[0].x, left[0].y);
+  for (const pt of left) ctx.lineTo(pt.x, pt.y);
+  for (let i = right.length - 1; i >= 0; i--) ctx.lineTo(right[i].x, right[i].y);
+  ctx.closePath();
   ctx.fill();
+}
 
-  if (ob.kind === 'hurdle') {
-    // Rào chắn thể thao — nâng cấp với gradient và viền metallic
-    // Chân đế kim loại
-    ctx.fillStyle = '#475569';
-    roundRect(ctx, ob.x - 5, GROUND - 5, 13, 5, 1);
+/* ---------------- Môi trường 6 lớp parallax + chu kỳ thời gian ---------- */
+const SKY_PHASES: [string, string][] = [
+  ['#fb923c', '#fef3c7'], // Bình minh vàng ấm
+  ['#38bdf8', '#e0f2fe'], // Ngày xanh trong
+  ['#7e22ce', '#fb7185'], // Hoàng hôn tím đỏ
+  ['#0f172a', '#134e4a'], // Đêm cực quang sinh học
+];
+
+function drawEnvironment(
+  ctx: CanvasRenderingContext2D,
+  dist: number,
+  time: number,
+) {
+  /* Lớp 0 — Bầu trời: nội suy màu mượt qua 4 pha theo quãng đường. */
+  const phaseFloat = (dist / 12000) % 4;
+  const phaseIdx = Math.floor(phaseFloat);
+  const phaseNext = (phaseIdx + 1) % 4;
+  const rawT = phaseFloat - phaseIdx;
+  const t = rawT * rawT * (3 - 2 * rawT); // smoothstep
+  const top = lerpColor(SKY_PHASES[phaseIdx][0], SKY_PHASES[phaseNext][0], t);
+  const horizon = lerpColor(SKY_PHASES[phaseIdx][1], SKY_PHASES[phaseNext][1], t);
+  const nightFactor = phaseIdx === 3 ? 1 : phaseIdx === 2 ? t * 0.6 : 0;
+  const sky = ctx.createLinearGradient(0, 0, 0, GROUND);
+  sky.addColorStop(0, top);
+  sky.addColorStop(1, horizon);
+  ctx.fillStyle = sky;
+  ctx.fillRect(0, 0, W, GROUND);
+
+  /* Mặt trời / mặt trăng + sao lấp lánh khi tối. */
+  if (nightFactor < 0.9) {
+    const sunGlow = ctx.createRadialGradient(800, 62, 4, 800, 62, 70);
+    sunGlow.addColorStop(0, 'rgba(254, 243, 199, 0.9)');
+    sunGlow.addColorStop(1, 'rgba(254, 243, 199, 0)');
+    ctx.fillStyle = sunGlow;
+    ellipse(ctx, 800, 62, 70, 70);
     ctx.fill();
-    roundRect(ctx, ob.x + w - 8, GROUND - 5, 13, 5, 1);
-    ctx.fill();
-    // Trụ đứng gradient metallic
-    const poleMetal = ctx.createLinearGradient(ob.x + 2, 0, ob.x + 6, 0);
-    poleMetal.addColorStop(0, '#94a3b8');
-    poleMetal.addColorStop(0.5, '#cbd5e1');
-    poleMetal.addColorStop(1, '#94a3b8');
-    ctx.fillStyle = poleMetal;
-    ctx.fillRect(ob.x + 2, y + 8, 4, h - 8);
-    ctx.fillRect(ob.x + w - 6, y + 8, 4, h - 8);
-    // Thanh rào chắn gradient cam
-    const barGrad = ctx.createLinearGradient(0, y, 0, y + 10);
-    barGrad.addColorStop(0, '#f97316');
-    barGrad.addColorStop(0.5, '#ea580c');
-    barGrad.addColorStop(1, '#c2410c');
-    ctx.fillStyle = barGrad;
-    roundRect(ctx, ob.x - 3, y, w + 6, 11, 3);
-    ctx.fill();
-    // Sọc phản quang trắng
-    ctx.fillStyle = '#ffffff';
-    roundRect(ctx, ob.x + 3, y + 1, 7, 9, 2); ctx.fill();
-    roundRect(ctx, ob.x + w - 10, y + 1, 7, 9, 2); ctx.fill();
-    // Viền sáng đỉnh rào
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.4)';
-    ctx.lineWidth = 1;
+    ctx.fillStyle = '#fde68a';
     ctx.beginPath();
-    ctx.moveTo(ob.x - 2, y + 1);
-    ctx.lineTo(ob.x + w + 2, y + 1);
-    ctx.stroke();
-  } else if (ob.kind === 'rock') {
-    // Tảng đá địa chất 3D — nhiều lớp, vân đá, rêu, chi tiết khoáng vật
-    // Thân đá tối
-    ctx.fillStyle = '#334155';
+    ctx.arc(800, 62, 26, 0, Math.PI * 2);
+    ctx.fill();
+  } else {
+    ctx.fillStyle = '#e2e8f0';
     ctx.beginPath();
-    ctx.moveTo(ob.x - 2, GROUND);
-    ctx.lineTo(ob.x + 5, y + 10);
-    ctx.lineTo(ob.x + 14, y + 3);
-    ctx.lineTo(ob.x + 22, y);
-    ctx.lineTo(ob.x + 30, y + 6);
-    ctx.lineTo(ob.x + w + 2, GROUND);
+    ctx.arc(800, 62, 20, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#cbd5e1';
+    ctx.beginPath();
+    ctx.arc(794, 58, 5, 0, Math.PI * 2);
+    ctx.arc(806, 68, 4, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  if (nightFactor > 0.2) {
+    for (let i = 0; i < 40; i++) {
+      const sx = (i * 197) % W;
+      const sy = (i * 89) % 150 + 10;
+      const tw = 0.5 + 0.5 * Math.sin(time * 2 + i * 1.7);
+      ctx.fillStyle = `rgba(255, 255, 255, ${(0.25 + 0.55 * tw) * nightFactor})`;
+      ctx.fillRect(sx, sy, 2, 2);
+    }
+  }
+
+  /* Mây trôi bồng bềnh (parallax 0.05x). */
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.85)';
+  for (let i = 0; i < 3; i++) {
+    const cx = ((i * 420 - dist * 0.05) % (W + 240)) - 120 + time * 2;
+    const cy = 40 + i * 34;
+    ctx.beginPath();
+    ctx.arc(cx, cy, 18, 0, Math.PI * 2);
+    ctx.arc(cx + 18, cy - 6, 22, 0, Math.PI * 2);
+    ctx.arc(cx + 40, cy, 16, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  /* Lớp 1 — Dãy núi địa chất hùng vĩ (0.1x), sương mù chân núi. */
+  const off1 = dist * 0.1;
+  ctx.fillStyle = lerpColor('#64748b', horizon, 0.45);
+  ctx.beginPath();
+  ctx.moveTo(0, GROUND);
+  for (let x = 0; x <= W; x += 16) {
+    const wx = x + off1;
+    const y = 190 + Math.sin(wx * 0.008) * 30 + Math.sin(wx * 0.021 + 2) * 13;
+    ctx.lineTo(x, y);
+  }
+  ctx.lineTo(W, GROUND);
+  ctx.closePath();
+  ctx.fill();
+  const mist = ctx.createLinearGradient(0, 210, 0, GROUND);
+  mist.addColorStop(0, 'rgba(255, 255, 255, 0)');
+  mist.addColorStop(1, 'rgba(255, 255, 255, 0.35)');
+  ctx.fillStyle = mist;
+  ctx.fillRect(0, 210, W, GROUND - 210);
+
+  /* Lớp 2 — Đồi địa tầng + rừng + tua-bin điện gió (0.3x). */
+  const off2 = dist * 0.3;
+  ctx.fillStyle = '#65a30d';
+  ctx.beginPath();
+  ctx.moveTo(0, GROUND);
+  for (let x = 0; x <= W; x += 16) {
+    ctx.lineTo(x, 232 + Math.sin((x + off2) * 0.012) * 12);
+  }
+  ctx.lineTo(W, GROUND);
+  ctx.closePath();
+  ctx.fill();
+  for (let i = 0; i < 6; i++) {
+    const tx = ((i * 260 - off2) % (W + 200)) - 100;
+    ctx.fillStyle = '#7c2d12';
+    ctx.fillRect(tx - 2, 218, 4, 18);
+    ctx.fillStyle = '#166534';
+    ctx.beginPath();
+    ctx.moveTo(tx - 13, 220);
+    ctx.lineTo(tx, 192);
+    ctx.lineTo(tx + 13, 220);
     ctx.closePath();
     ctx.fill();
-    // Mặt sáng (highlight face)
-    ctx.fillStyle = '#64748b';
+  }
+  for (let i = 0; i < 3; i++) {
+    const bx = ((i * 430 - off2) % (W + 160)) - 80;
+    ctx.strokeStyle = '#e2e8f0';
+    ctx.lineWidth = 2;
     ctx.beginPath();
-    ctx.moveTo(ob.x + 14, y + 3);
-    ctx.lineTo(ob.x + 22, y);
-    ctx.lineTo(ob.x + 30, y + 6);
-    ctx.lineTo(ob.x + 26, y + 14);
-    ctx.lineTo(ob.x + 16, y + 12);
-    ctx.closePath();
-    ctx.fill();
-    // Phản chiếu sáng đỉnh
-    ctx.fillStyle = '#94a3b8';
-    ctx.beginPath();
-    ctx.moveTo(ob.x + 18, y + 1);
-    ctx.lineTo(ob.x + 22, y);
-    ctx.lineTo(ob.x + 26, y + 4);
-    ctx.lineTo(ob.x + 22, y + 6);
-    ctx.closePath();
-    ctx.fill();
-    // Vân đá (crack lines)
-    ctx.strokeStyle = 'rgba(0, 0, 0, 0.2)';
-    ctx.lineWidth = 0.8;
-    ctx.beginPath();
-    ctx.moveTo(ob.x + 12, y + 8);
-    ctx.lineTo(ob.x + 18, y + 16);
-    ctx.lineTo(ob.x + 24, y + 20);
+    ctx.moveTo(bx, 235);
+    ctx.lineTo(bx, 195);
     ctx.stroke();
-    // Rêu xanh
-    ctx.fillStyle = '#10b981';
-    ctx.beginPath();
-    ctx.arc(ob.x + 18, y + 2, 4, Math.PI, 0);
-    ctx.fill();
-    // Chấm khoáng vật lấp lánh
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
-    ctx.beginPath();
-    ctx.arc(ob.x + 10, y + 12, 1.2, 0, Math.PI * 2);
-    ctx.arc(ob.x + 28, y + 10, 1, 0, Math.PI * 2);
-    ctx.fill();
-  } else if (ob.kind === 'puddle') {
-    // Vũng nước — phản chiếu bầu trời, sóng gợn đồng tâm, bọt khí
-    ctx.fillStyle = 'rgba(56, 189, 248, 0.7)';
-    ctx.beginPath();
-    ctx.ellipse(ob.x + w / 2, GROUND - 3, w / 2 + 2, 7, 0, 0, Math.PI * 2);
-    ctx.fill();
-    // Lớp trong (sâu hơn)
-    ctx.fillStyle = '#0284c7';
-    ctx.beginPath();
-    ctx.ellipse(ob.x + w / 2, GROUND - 3, w / 2 - 6, 4, 0, 0, Math.PI * 2);
-    ctx.fill();
-    // Phản chiếu mặt trời / trăng nhỏ
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
-    ctx.beginPath();
-    ctx.ellipse(ob.x + w / 2 - 6, GROUND - 5, 5, 2, -0.2, 0, Math.PI * 2);
-    ctx.fill();
-    // Sóng gợn đồng tâm lan tỏa
-    const rippleT = (frame * 0.06) % 1;
-    ctx.strokeStyle = `rgba(125, 211, 252, ${0.6 * (1 - rippleT)})`;
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.ellipse(ob.x + w / 2, GROUND - 3, (w / 2 - 2) * (0.3 + 0.7 * rippleT), (3 + 4 * rippleT), 0, 0, Math.PI * 2);
-    ctx.stroke();
-    const ripple2T = ((frame * 0.06 + 0.5) % 1);
-    ctx.strokeStyle = `rgba(125, 211, 252, ${0.4 * (1 - ripple2T)})`;
-    ctx.beginPath();
-    ctx.ellipse(ob.x + w / 2, GROUND - 3, (w / 2) * (0.2 + 0.8 * ripple2T), (2 + 5 * ripple2T), 0, 0, Math.PI * 2);
-    ctx.stroke();
-  } else if (ob.kind === 'drone') {
-    // Drone bay quay phim — nâng cấp với bóng đổ, cánh quạt quay, antenna
-    const droneY = y + Math.sin(frame * 0.15) * 6;
-    // Bóng đổ drone trên mặt đất
-    ctx.fillStyle = 'rgba(0, 0, 0, 0.12)';
-    ctx.beginPath();
-    ctx.ellipse(ob.x + w / 2, GROUND + 2, 16, 3, 0, 0, Math.PI * 2);
-    ctx.fill();
-    // Cần nối cánh quạt
-    ctx.fillStyle = '#475569';
-    ctx.fillRect(ob.x + 3, droneY - 2, 3, 5);
-    ctx.fillRect(ob.x + w - 6, droneY - 2, 3, 5);
-    // Cánh quạt quay tít (motion blur)
-    const propAngle = frame * 0.5;
-    ctx.save();
-    for (const px of [ob.x + 5, ob.x + w - 5]) {
-      ctx.fillStyle = 'rgba(200, 200, 200, 0.55)';
+    const ang = time * 2 + i;
+    for (let b = 0; b < 3; b++) {
+      const a = ang + (b * Math.PI * 2) / 3;
       ctx.beginPath();
-      ctx.ellipse(px, droneY - 5, 12, 2.5, propAngle, 0, Math.PI * 2);
+      ctx.moveTo(bx, 195);
+      ctx.lineTo(bx + Math.cos(a) * 14, 195 + Math.sin(a) * 14);
+      ctx.stroke();
+    }
+  }
+
+  /* Lớp 3 — Cận cảnh: cây đung đưa + biển cổ vũ GEOENV RUN (0.6x). */
+  const off3 = dist * 0.6;
+  for (let i = 0; i < 5; i++) {
+    const tx = ((i * 300 - off3) % (W + 240)) - 120;
+    const sway = Math.sin(time * 1.6 + i) * 2.5;
+    ctx.strokeStyle = '#78350f';
+    ctx.lineWidth = 4;
+    ctx.beginPath();
+    ctx.moveTo(tx, GROUND);
+    ctx.lineTo(tx + sway, GROUND - 34);
+    ctx.stroke();
+    ctx.fillStyle = '#15803d';
+    ctx.beginPath();
+    ctx.arc(tx + sway - 8, GROUND - 40, 12, 0, Math.PI * 2);
+    ctx.arc(tx + sway + 8, GROUND - 40, 12, 0, Math.PI * 2);
+    ctx.arc(tx + sway, GROUND - 50, 13, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  for (let i = 0; i < 2; i++) {
+    const bx = ((i * 700 - off3) % (W + 300)) - 150;
+    ctx.fillStyle = '#334155';
+    ctx.fillRect(bx, GROUND - 46, 4, 46);
+    ctx.fillRect(bx + 96, GROUND - 46, 4, 46);
+    const bannerGrad = ctx.createLinearGradient(bx, GROUND - 46, bx, GROUND - 20);
+    bannerGrad.addColorStop(0, nightFactor > 0.5 ? '#0e7490' : '#22c55e');
+    bannerGrad.addColorStop(1, nightFactor > 0.5 ? '#155e75' : '#16a34a');
+    ctx.fillStyle = bannerGrad;
+    roundRectPath(ctx, bx, GROUND - 46, 100, 26, 4);
+    ctx.fill();
+    ctx.fillStyle = nightFactor > 0.5 ? '#a5f3fc' : '#ffffff';
+    ctx.font = 'bold 11px sans-serif';
+    ctx.textAlign = 'center';
+    ctx.fillText('GEOENV RUN', bx + 50, GROUND - 28);
+  }
+
+  /* Lớp 4 — Mặt đường + lát cắt địa chất dưới lòng đất (1.0x). */
+  const strata: [number, string][] = [
+    [14, '#d6b98a'],
+    [28, '#94a3b8'],
+    [H - GROUND, '#475569'],
+  ];
+  let sy = GROUND;
+  for (const [hgt, col] of strata) {
+    ctx.fillStyle = col;
+    ctx.fillRect(0, sy, W, hgt);
+    sy += hgt;
+  }
+  /* Mạch tinh thể thạch anh phát sáng trong lòng đất. */
+  for (let i = 0; i < 10; i++) {
+    const qx = ((i * 173 - dist) % (W + 60)) - 30;
+    const qy = GROUND + 18 + ((i * 37) % 30);
+    const tw = 0.4 + 0.6 * (0.5 + 0.5 * Math.sin(time * 3 + i * 2.1));
+    ctx.save();
+    ctx.translate(qx, qy);
+    ctx.rotate(0.6);
+    ctx.fillStyle = `rgba(165, 243, 252, ${0.25 + 0.55 * tw})`;
+    ctx.fillRect(-3, -7, 6, 14);
+    ctx.restore();
+  }
+  /* Mặt đường tartan + vạch kẻ phân làn chạy theo tốc độ. */
+  const trackGrad = ctx.createLinearGradient(0, GROUND - 5, 0, GROUND);
+  trackGrad.addColorStop(0, '#c2410c');
+  trackGrad.addColorStop(1, '#7c2d12');
+  ctx.fillStyle = trackGrad;
+  ctx.fillRect(0, GROUND - 5, W, 5);
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.85)';
+  for (let x = -40; x < W; x += 40) {
+    const dx = x - (dist % 40);
+    ctx.fillRect(dx, GROUND - 4, 18, 2);
+  }
+  /* Ngọn cỏ uốn cong, cong mạnh hơn khi VĐV lướt qua. */
+  ctx.strokeStyle = '#16a34a';
+  ctx.lineWidth = 1.5;
+  for (let x = 0; x < W; x += 14) {
+    const near = Math.max(0, 1 - Math.abs(x - RUNNER_X) / 70);
+    const bend = Math.sin(time * 2 + x * 0.05) * 2 + near * 5;
+    ctx.beginPath();
+    ctx.moveTo(x, GROUND - 4);
+    ctx.quadraticCurveTo(x + bend, GROUND - 9, x + bend * 1.4, GROUND - 12);
+    ctx.stroke();
+  }
+
+  /* Lớp 5 — Tiền cảnh khí quyển (1.25x): phấn hoa / lá / đom đóm. */
+  const off5 = dist * 1.25;
+  for (let i = 0; i < 24; i++) {
+    const px = ((i * 97 - off5) % (W + 40)) - 20;
+    const py = 40 + ((i * 53) % 200) + Math.sin(time + i) * 8;
+    if (nightFactor > 0.5) {
+      const pulse = 0.5 + 0.5 * Math.sin(time * 4 + i);
+      const glow = ctx.createRadialGradient(px, py, 1, px, py, 10);
+      glow.addColorStop(0, `rgba(253, 224, 71, ${0.5 + 0.4 * pulse})`);
+      glow.addColorStop(1, 'rgba(253, 224, 71, 0)');
+      ctx.fillStyle = glow;
+      ellipse(ctx, px, py, 10, 10);
+      ctx.fill();
+    } else {
+      ctx.fillStyle = 'rgba(254, 249, 195, 0.8)';
+      ellipse(ctx, px, py, 2.5, 1.8);
       ctx.fill();
     }
-    ctx.restore();
-    // Thân drone gradient
-    const droneGrad = ctx.createLinearGradient(0, droneY, 0, droneY + 14);
-    droneGrad.addColorStop(0, '#334155');
-    droneGrad.addColorStop(1, '#1e293b');
-    ctx.fillStyle = droneGrad;
-    roundRect(ctx, ob.x + 3, droneY, w - 6, 15, 5);
-    ctx.fill();
-    // Viền sáng thân drone
-    ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
-    ctx.lineWidth = 1;
-    ctx.stroke();
-    // Ống kính camera
-    ctx.fillStyle = '#0f172a';
-    ctx.beginPath(); ctx.arc(ob.x + w / 2, droneY + 13, 5, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = '#38bdf8';
-    ctx.beginPath(); ctx.arc(ob.x + w / 2, droneY + 13, 3.5, 0, Math.PI * 2); ctx.fill();
-    // Phản chiếu ống kính
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.4)';
-    ctx.beginPath(); ctx.arc(ob.x + w / 2 - 1, droneY + 12, 1.2, 0, Math.PI * 2); ctx.fill();
-    // LED nhấp nháy
-    const led1 = frame % 20 < 10 ? '#ef4444' : 'rgba(239, 68, 68, 0.2)';
-    const led2 = frame % 20 < 10 ? 'rgba(34, 197, 94, 0.2)' : '#22c55e';
-    ctx.fillStyle = led1;
-    ctx.beginPath(); ctx.arc(ob.x + 6, droneY + 6, 2.5, 0, Math.PI * 2); ctx.fill();
-    ctx.fillStyle = led2;
-    ctx.beginPath(); ctx.arc(ob.x + w - 6, droneY + 6, 2.5, 0, Math.PI * 2); ctx.fill();
-    // Hào quang LED
-    if (frame % 20 < 10) {
-      ctx.fillStyle = 'rgba(239, 68, 68, 0.15)';
-      ctx.beginPath(); ctx.arc(ob.x + 6, droneY + 6, 6, 0, Math.PI * 2); ctx.fill();
-    } else {
-      ctx.fillStyle = 'rgba(34, 197, 94, 0.15)';
-      ctx.beginPath(); ctx.arc(ob.x + w - 6, droneY + 6, 6, 0, Math.PI * 2); ctx.fill();
+  }
+}
+
+/* ---------------- Chướng ngại vật: vẽ bằng đa giác + gradient ------------ */
+function drawObstacle(ctx: CanvasRenderingContext2D, ob: Obstacle, time: number) {
+  const box = OB_BOX[ob.kind];
+  const x = ob.x;
+  const top = box.yTop;
+  ctx.save();
+  switch (ob.kind) {
+    case 'hurdle': {
+      ctx.fillStyle = '#334155';
+      ctx.beginPath();
+      ctx.moveTo(x, GROUND);
+      ctx.lineTo(x + 5, top + 6);
+      ctx.lineTo(x + 9, GROUND);
+      ctx.closePath();
+      ctx.moveTo(x + 17, GROUND);
+      ctx.lineTo(x + 22, top + 6);
+      ctx.lineTo(x + 26, GROUND);
+      ctx.closePath();
+      ctx.fill();
+      const barGrad = ctx.createLinearGradient(x, top, x, top + 8);
+      barGrad.addColorStop(0, '#f8fafc');
+      barGrad.addColorStop(0.5, '#ef4444');
+      barGrad.addColorStop(1, '#b91c1c');
+      ctx.fillStyle = barGrad;
+      roundRectPath(ctx, x - 2, top, 30, 8, 3);
+      ctx.fill();
+      break;
     }
-    // Antenna nhỏ
-    ctx.strokeStyle = '#94a3b8';
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.moveTo(ob.x + w / 2, droneY);
-    ctx.lineTo(ob.x + w / 2, droneY - 8);
-    ctx.stroke();
-    ctx.fillStyle = '#ef4444';
-    ctx.beginPath(); ctx.arc(ob.x + w / 2, droneY - 8, 1.5, 0, Math.PI * 2); ctx.fill();
+    case 'rock': {
+      const grad = ctx.createLinearGradient(x, top, x, GROUND);
+      grad.addColorStop(0, '#94a3b8');
+      grad.addColorStop(1, '#475569');
+      ctx.fillStyle = grad;
+      ctx.beginPath();
+      const j = ob.seed;
+      ctx.moveTo(x, GROUND);
+      ctx.lineTo(x + 4 + j, top + 8);
+      ctx.lineTo(x + 14, top);
+      ctx.lineTo(x + 26, top + 6);
+      ctx.lineTo(x + 34, GROUND);
+      ctx.closePath();
+      ctx.fill();
+      /* Vân nứt phát sáng trên tảng đá. */
+      ctx.strokeStyle = 'rgba(165, 243, 252, 0.9)';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(x + 14, top + 2);
+      ctx.lineTo(x + 12, top + 12);
+      ctx.lineTo(x + 18, top + 18);
+      ctx.stroke();
+      break;
+    }
+    case 'puddle': {
+      const grad = ctx.createRadialGradient(x + 22, top + 6, 2, x + 22, top + 6, 24);
+      grad.addColorStop(0, '#7dd3fc');
+      grad.addColorStop(1, '#0369a1');
+      ctx.fillStyle = grad;
+      ellipse(ctx, x + 22, top + 6, 24, 7);
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.7)';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.ellipse(x + 16, top + 4, 10, 2.5, -0.2, 0, Math.PI);
+      ctx.stroke();
+      break;
+    }
+    case 'drone': {
+      /* Tia laser quét xuống đất. */
+      const scan = ctx.createLinearGradient(0, top + 20, 0, GROUND);
+      scan.addColorStop(0, 'rgba(239, 68, 68, 0.35)');
+      scan.addColorStop(1, 'rgba(239, 68, 68, 0)');
+      ctx.fillStyle = scan;
+      ctx.beginPath();
+      ctx.moveTo(x + 16, top + 20);
+      ctx.lineTo(x + 24, top + 20);
+      ctx.lineTo(x + 30, GROUND);
+      ctx.lineTo(x + 10, GROUND);
+      ctx.closePath();
+      ctx.fill();
+      const bodyGrad = ctx.createLinearGradient(x, top, x, top + 22);
+      bodyGrad.addColorStop(0, '#475569');
+      bodyGrad.addColorStop(1, '#1e293b');
+      ctx.fillStyle = bodyGrad;
+      ellipse(ctx, x + 20, top + 10, 20, 11);
+      ctx.fill();
+      /* Cánh quạt quay. */
+      const ang = time * 18;
+      ctx.strokeStyle = '#cbd5e1';
+      ctx.lineWidth = 2;
+      for (const rx of [x + 6, x + 34]) {
+        ctx.beginPath();
+        ctx.moveTo(rx - 9 * Math.cos(ang), top + 2 - 3 * Math.sin(ang));
+        ctx.lineTo(rx + 9 * Math.cos(ang), top + 2 + 3 * Math.sin(ang));
+        ctx.stroke();
+      }
+      ctx.fillStyle = Math.sin(time * 6) > 0 ? '#ef4444' : '#fca5a5';
+      ctx.beginPath();
+      ctx.arc(x + 20, top + 16, 3, 0, Math.PI * 2);
+      ctx.fill();
+      break;
+    }
+    case 'barrel': {
+      const grad = ctx.createLinearGradient(x, top, x, GROUND);
+      grad.addColorStop(0, '#f97316');
+      grad.addColorStop(0.5, '#ea580c');
+      grad.addColorStop(1, '#9a3412');
+      ctx.fillStyle = grad;
+      roundRectPath(ctx, x, top, 30, GROUND - top, 4);
+      ctx.fill();
+      ctx.fillStyle = '#facc15';
+      ctx.fillRect(x, top + 12, 30, 6);
+      ctx.fillStyle = '#111827';
+      ctx.beginPath();
+      ctx.moveTo(x + 4, top + 12);
+      ctx.lineTo(x + 10, top + 18);
+      ctx.lineTo(x + 4, top + 18);
+      ctx.closePath();
+      ctx.moveTo(x + 12, top + 12);
+      ctx.lineTo(x + 18, top + 18);
+      ctx.lineTo(x + 12, top + 18);
+      ctx.closePath();
+      ctx.fill();
+      /* Khói độc bốc lên. */
+      for (let s = 0; s < 3; s++) {
+        const sy = top - 4 - ((time * 14 + s * 9) % 18);
+        ctx.fillStyle = `rgba(120, 113, 108, ${0.35 - s * 0.08})`;
+        ctx.beginPath();
+        ctx.arc(x + 15 + Math.sin(time * 2 + s) * 3, sy, 3 + s, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      break;
+    }
+    case 'branch': {
+      ctx.strokeStyle = '#78350f';
+      ctx.lineWidth = 7;
+      ctx.beginPath();
+      ctx.moveTo(x - 6, top + 4);
+      ctx.quadraticCurveTo(x + 28, top - 6, x + 62, top + 4);
+      ctx.stroke();
+      ctx.fillStyle = '#15803d';
+      for (let l = 0; l < 4; l++) {
+        ctx.beginPath();
+        ctx.arc(x + 8 + l * 14, top - 2 + (l % 2) * 4, 9, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      break;
+    }
+    case 'sign': {
+      ctx.fillStyle = '#475569';
+      ctx.fillRect(x + 4, top + 26, 5, GROUND - top - 26);
+      ctx.fillRect(x + 39, top + 26, 5, GROUND - top - 26);
+      const boardGrad = ctx.createLinearGradient(x, top, x, top + 26);
+      boardGrad.addColorStop(0, '#f8fafc');
+      boardGrad.addColorStop(1, '#e2e8f0');
+      ctx.fillStyle = boardGrad;
+      roundRectPath(ctx, x, top, 48, 26, 4);
+      ctx.fill();
+      ctx.fillStyle = '#1e5fc4';
+      ctx.font = 'bold 10px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText('GEOENV', x + 24, top + 17);
+      break;
+    }
   }
+  ctx.restore();
 }
 
-function drawItem(ctx: CanvasRenderingContext2D, item: Item, frame: number) {
-  const bobY = item.y + Math.sin(frame * 0.1 + item.bob) * 5;
-  const glowPhase = Math.sin(frame * 0.12 + item.bob) * 0.4 + 0.6;
-
-  if (item.kind === 'bottle') {
-    // Hào quang nhẹ
-    ctx.fillStyle = `rgba(125, 211, 252, ${0.15 * glowPhase})`;
-    ctx.beginPath(); ctx.arc(item.x + 7, bobY + 10, 18, 0, Math.PI * 2); ctx.fill();
-    // Chai nước sport — nắp, thân, nhãn, bọt khí
-    // Nắp chai
-    ctx.fillStyle = '#0ea5e9';
-    roundRect(ctx, item.x + 3, bobY - 6, 9, 6, 2);
-    ctx.fill();
-    // Thân chai
-    ctx.fillStyle = '#7dd3fc';
-    roundRect(ctx, item.x, bobY, 15, 24, 4);
-    ctx.fill();
-    // Nước bên trong (gradient)
-    const waterGrad = ctx.createLinearGradient(0, bobY + 6, 0, bobY + 22);
-    waterGrad.addColorStop(0, '#0ea5e9');
-    waterGrad.addColorStop(1, '#0284c7');
-    ctx.fillStyle = waterGrad;
-    roundRect(ctx, item.x + 2, bobY + 6, 11, 16, 3);
-    ctx.fill();
-    // Nhãn chai
-    ctx.fillStyle = '#e0f2fe';
-    ctx.fillRect(item.x + 2, bobY + 10, 11, 6);
-    ctx.fillStyle = '#0284c7';
-    ctx.font = 'bold 5px sans-serif';
-    ctx.textAlign = 'center';
-    ctx.fillText('H₂O', item.x + 7, bobY + 15);
-    // Phản chiếu sáng
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.55)';
-    ctx.fillRect(item.x + 2, bobY + 1, 3, 12);
-    // Bọt khí
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.5)';
-    const bubblePhase = (frame * 0.1 + item.bob) % (Math.PI * 2);
-    ctx.beginPath(); ctx.arc(item.x + 6, bobY + 8 - Math.abs(Math.sin(bubblePhase)) * 4, 1.5, 0, Math.PI * 2); ctx.fill();
-    ctx.beginPath(); ctx.arc(item.x + 10, bobY + 12 - Math.abs(Math.sin(bubblePhase + 1)) * 3, 1, 0, Math.PI * 2); ctx.fill();
-  } else if (item.kind === 'medal') {
-    // Hào quang vàng
-    ctx.fillStyle = `rgba(251, 191, 36, ${0.2 * glowPhase})`;
-    ctx.beginPath(); ctx.arc(item.x + 10, bobY + 10, 20, 0, Math.PI * 2); ctx.fill();
-    // Dây đeo huy chương (ribbon)
-    ctx.strokeStyle = '#ef4444';
-    ctx.lineWidth = 2.5;
-    ctx.lineCap = 'round';
-    ctx.beginPath();
-    ctx.moveTo(item.x + 5, bobY - 2);
-    ctx.quadraticCurveTo(item.x + 10, bobY - 8, item.x + 15, bobY - 2);
-    ctx.stroke();
-    // Huy chương ngoài
-    const medalGrad = ctx.createRadialGradient(item.x + 10, bobY + 9, 2, item.x + 10, bobY + 10, 12);
-    medalGrad.addColorStop(0, '#fde68a');
-    medalGrad.addColorStop(0.6, '#fbbf24');
-    medalGrad.addColorStop(1, '#d97706');
-    ctx.fillStyle = medalGrad;
-    ctx.beginPath(); ctx.arc(item.x + 10, bobY + 10, 12, 0, Math.PI * 2); ctx.fill();
-    // Viền huy chương
-    ctx.strokeStyle = '#b45309';
-    ctx.lineWidth = 1.5;
-    ctx.stroke();
-    // Mặt huy chương trong
-    ctx.fillStyle = '#f59e0b';
-    ctx.beginPath(); ctx.arc(item.x + 10, bobY + 10, 8, 0, Math.PI * 2); ctx.fill();
-    // Ngôi sao 5 cánh
-    ctx.fillStyle = '#ffffff';
-    drawStar(ctx, item.x + 10, bobY + 10, 5);
-    ctx.fill();
-    // Phản chiếu sáng
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.35)';
-    ctx.beginPath(); ctx.arc(item.x + 7, bobY + 7, 4, 0, Math.PI * 2); ctx.fill();
-  } else if (item.kind === 'shield') {
-    // Vòng năng lượng xoay
-    const shieldAngle = frame * 0.06;
-    ctx.strokeStyle = `rgba(56, 189, 248, ${0.4 * glowPhase})`;
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.arc(item.x + 10, bobY + 10, 16 + glowPhase * 2, shieldAngle, shieldAngle + Math.PI * 1.5);
-    ctx.stroke();
-    // Hào quang xanh
-    ctx.fillStyle = `rgba(56, 189, 248, ${0.18 * glowPhase})`;
-    ctx.beginPath(); ctx.arc(item.x + 10, bobY + 10, 18, 0, Math.PI * 2); ctx.fill();
-    // Viên ngọc xanh gradient
-    const shieldGem = ctx.createRadialGradient(item.x + 8, bobY + 8, 2, item.x + 10, bobY + 10, 10);
-    shieldGem.addColorStop(0, '#67e8f9');
-    shieldGem.addColorStop(0.5, '#0ea5e9');
-    shieldGem.addColorStop(1, '#0369a1');
-    ctx.fillStyle = shieldGem;
-    ctx.beginPath(); ctx.arc(item.x + 10, bobY + 10, 10, 0, Math.PI * 2); ctx.fill();
-    // Hình khiên bên trong
-    ctx.fillStyle = '#ffffff';
-    ctx.beginPath();
-    ctx.moveTo(item.x + 10, bobY + 3);
-    ctx.lineTo(item.x + 17, bobY + 7);
-    ctx.lineTo(item.x + 15, bobY + 15);
-    ctx.lineTo(item.x + 10, bobY + 18);
-    ctx.lineTo(item.x + 5, bobY + 15);
-    ctx.lineTo(item.x + 3, bobY + 7);
-    ctx.closePath();
-    ctx.fill();
-    ctx.fillStyle = '#0284c7';
-    ctx.beginPath();
-    ctx.moveTo(item.x + 10, bobY + 5);
-    ctx.lineTo(item.x + 15, bobY + 8);
-    ctx.lineTo(item.x + 13, bobY + 14);
-    ctx.lineTo(item.x + 10, bobY + 16);
-    ctx.lineTo(item.x + 7, bobY + 14);
-    ctx.lineTo(item.x + 5, bobY + 8);
-    ctx.closePath();
-    ctx.fill();
-    // Phản chiếu
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
-    ctx.beginPath(); ctx.arc(item.x + 7, bobY + 7, 3.5, 0, Math.PI * 2); ctx.fill();
-  } else if (item.kind === 'booster') {
-    // Hào quang vàng xoay
-    const boostAngle = frame * 0.08;
-    ctx.strokeStyle = `rgba(234, 179, 8, ${0.4 * glowPhase})`;
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    ctx.arc(item.x + 10, bobY + 10, 18, boostAngle, boostAngle + Math.PI * 1.2);
-    ctx.stroke();
-    ctx.beginPath();
-    ctx.arc(item.x + 10, bobY + 10, 18, boostAngle + Math.PI, boostAngle + Math.PI * 2.2);
-    ctx.stroke();
-    // Hào quang sáng
-    ctx.fillStyle = `rgba(250, 204, 21, ${0.2 * glowPhase})`;
-    ctx.beginPath(); ctx.arc(item.x + 10, bobY + 10, 20, 0, Math.PI * 2); ctx.fill();
-    // Lon nước tăng lực
-    const boostGrad = ctx.createLinearGradient(item.x + 2, bobY, item.x + 18, bobY);
-    boostGrad.addColorStop(0, '#ca8a04');
-    boostGrad.addColorStop(0.5, '#eab308');
-    boostGrad.addColorStop(1, '#ca8a04');
-    ctx.fillStyle = boostGrad;
-    roundRect(ctx, item.x + 2, bobY, 16, 22, 4);
-    ctx.fill();
-    // Viền metallic
-    ctx.strokeStyle = '#a16207';
-    ctx.lineWidth = 1;
-    ctx.stroke();
-    // Nhãn sét
-    ctx.fillStyle = '#0f172a';
-    ctx.beginPath();
-    ctx.moveTo(item.x + 11, bobY + 3);
-    ctx.lineTo(item.x + 7, bobY + 11);
-    ctx.lineTo(item.x + 10, bobY + 11);
-    ctx.lineTo(item.x + 9, bobY + 19);
-    ctx.lineTo(item.x + 13, bobY + 11);
-    ctx.lineTo(item.x + 10, bobY + 11);
-    ctx.closePath();
-    ctx.fill();
-    // Phản chiếu sáng
-    ctx.fillStyle = 'rgba(255, 255, 255, 0.35)';
-    ctx.fillRect(item.x + 3, bobY + 1, 3, 14);
+/* ---------------- Vật phẩm: cầu năng lượng, tinh thể, khiên... ----------- */
+function drawItem(ctx: CanvasRenderingContext2D, item: Item, time: number) {
+  const bobY = Math.sin(time * 3 + item.bob) * 4;
+  const y = item.y + bobY;
+  const x = item.x;
+  ctx.save();
+  switch (item.kind) {
+    case 'bottle': {
+      ctx.fillStyle = '#38bdf8';
+      roundRectPath(ctx, x, y, 14, 20, 4);
+      ctx.fill();
+      ctx.fillStyle = '#0ea5e9';
+      ctx.fillRect(x + 4, y - 5, 6, 5);
+      ctx.fillStyle = '#f8fafc';
+      ctx.fillRect(x + 2, y + 7, 10, 6);
+      break;
+    }
+    case 'medal': {
+      ctx.strokeStyle = '#dc2626';
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.moveTo(x + 4, y);
+      ctx.lineTo(x + 12, y + 12);
+      ctx.lineTo(x + 20, y);
+      ctx.stroke();
+      const gold = ctx.createRadialGradient(x + 12, y + 20, 2, x + 12, y + 20, 12);
+      gold.addColorStop(0, '#fef08a');
+      gold.addColorStop(1, '#ca8a04');
+      ctx.fillStyle = gold;
+      ctx.beginPath();
+      ctx.arc(x + 12, y + 20, 11, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.fillStyle = '#fef9c3';
+      ctx.beginPath();
+      ctx.arc(x + 12, y + 20, 4, 0, Math.PI * 2);
+      ctx.fill();
+      break;
+    }
+    case 'shield': {
+      const glow = ctx.createRadialGradient(x + 12, y + 12, 2, x + 12, y + 12, 20);
+      glow.addColorStop(0, 'rgba(59, 130, 246, 0.5)');
+      glow.addColorStop(1, 'rgba(59, 130, 246, 0)');
+      ctx.fillStyle = glow;
+      ellipse(ctx, x + 12, y + 12, 20, 20);
+      ctx.fill();
+      ctx.strokeStyle = '#3b82f6';
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.arc(x + 12, y + 12, 11, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.strokeStyle = '#93c5fd';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.ellipse(x + 12, y + 12, 11, 5, 0, 0, Math.PI * 2);
+      ctx.stroke();
+      break;
+    }
+    case 'booster': {
+      const glow = ctx.createRadialGradient(x + 12, y + 12, 2, x + 12, y + 12, 22);
+      glow.addColorStop(0, 'rgba(250, 204, 21, 0.55)');
+      glow.addColorStop(1, 'rgba(250, 204, 21, 0)');
+      ctx.fillStyle = glow;
+      ellipse(ctx, x + 12, y + 12, 22, 22);
+      ctx.fill();
+      ctx.fillStyle = '#facc15';
+      ctx.beginPath();
+      ctx.moveTo(x + 15, y);
+      ctx.lineTo(x + 7, y + 14);
+      ctx.lineTo(x + 12, y + 14);
+      ctx.lineTo(x + 9, y + 24);
+      ctx.lineTo(x + 18, y + 10);
+      ctx.lineTo(x + 13, y + 10);
+      ctx.closePath();
+      ctx.fill();
+      break;
+    }
+    case 'eco': {
+      const glow = ctx.createRadialGradient(x + 12, y + 12, 2, x + 12, y + 12, 22);
+      glow.addColorStop(0, 'rgba(34, 197, 94, 0.55)');
+      glow.addColorStop(1, 'rgba(34, 197, 94, 0)');
+      ctx.fillStyle = glow;
+      ellipse(ctx, x + 12, y + 12, 22, 22);
+      ctx.fill();
+      const orb = ctx.createRadialGradient(x + 9, y + 8, 2, x + 12, y + 12, 12);
+      orb.addColorStop(0, '#bbf7d0');
+      orb.addColorStop(1, '#16a34a');
+      ctx.fillStyle = orb;
+      ctx.beginPath();
+      ctx.arc(x + 12, y + 12, 11, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = '#14532d';
+      ctx.lineWidth = 1.5;
+      ctx.beginPath();
+      ctx.moveTo(x + 12, y + 16);
+      ctx.quadraticCurveTo(x + 12, y + 8, x + 12, y + 6);
+      ctx.stroke();
+      ctx.fillStyle = '#22c55e';
+      ctx.beginPath();
+      ctx.ellipse(x + 8, y + 7, 4, 2.5, -0.5, 0, Math.PI * 2);
+      ctx.ellipse(x + 16, y + 7, 4, 2.5, 0.5, 0, Math.PI * 2);
+      ctx.fill();
+      break;
+    }
+    case 'crystal': {
+      const grad = ctx.createLinearGradient(x, y, x + 24, y + 24);
+      grad.addColorStop(0, '#e9d5ff');
+      grad.addColorStop(0.5, '#a855f7');
+      grad.addColorStop(1, '#06b6d4');
+      ctx.fillStyle = grad;
+      ctx.beginPath();
+      ctx.moveTo(x + 12, y);
+      ctx.lineTo(x + 24, y + 8);
+      ctx.lineTo(x + 20, y + 22);
+      ctx.lineTo(x + 4, y + 22);
+      ctx.lineTo(x, y + 8);
+      ctx.closePath();
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.7)';
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(x + 12, y);
+      ctx.lineTo(x + 12, y + 22);
+      ctx.moveTo(x, y + 8);
+      ctx.lineTo(x + 24, y + 8);
+      ctx.stroke();
+      const spark = 0.5 + 0.5 * Math.sin(time * 5);
+      ctx.fillStyle = `rgba(255, 255, 255, ${0.4 + 0.6 * spark})`;
+      ctx.beginPath();
+      ctx.arc(x + 20, y + 4, 2, 0, Math.PI * 2);
+      ctx.fill();
+      break;
+    }
   }
+  ctx.restore();
 }
 
-/* Helper kiểm tra va chạm hitbox AABB */
-function overlaps(
-  a: { x: number; y: number; w: number; h: number },
-  b: { x: number; y: number; w: number; h: number },
-) {
-  return a.x < b.x + b.w && a.x + a.w > b.x && a.y < b.y + b.h && a.y + a.h > b.y;
+/* ---------------- Trạng thái game (ref, không re-render mỗi frame) ------- */
+interface GameState {
+  y: number;
+  vy: number;
+  airborne: boolean;
+  jumps: number;
+  sliding: boolean;
+  slideTime: number;
+  speed: number;
+  score: number;
+  dist: number;
+  combo: number;
+  shield: boolean;
+  boostTime: number;
+  runTime: number;
+  runCycle: number;
+  squashX: number;
+  squashY: number;
+  squashRecover: number;
+  flip: number;
+  flipping: boolean;
+  buffer: number;
+  fastFall: boolean;
+  obstacles: Obstacle[];
+  items: Item[];
+  lastObDist: number;
+  nextGap: number;
+  lastItemDist: number;
+  nextItemGap: number;
+  particles: Particle[];
+  pCursor: number;
+  texts: FloatText[];
+  tCursor: number;
+  ghosts: Ghost[];
+  ghostTimer: number;
+  rings: ShockRing[];
+  skidMarks: { x: number; alpha: number }[];
+  ribbon: { x: number; y: number }[];
+  trauma: number;
+  camScale: number;
+  camY: number;
+  displayScore: number;
+  passedKm: Set<number>;
+  banner: { text: string; t: number } | null;
+  dustTimer: number;
+  sparkTimer: number;
+  bottles: number;
+  medals: number;
+  orbs: number;
+  crystals: number;
+  maxSpeed: number;
+  maxCombo: number;
+  crashed: boolean;
 }
 
-/* =========================================================================
-   COMPONENT CHÍNH: RUNNER GAME
-   ========================================================================= */
+function createParticles(): Particle[] {
+  const arr: Particle[] = [];
+  for (let i = 0; i < 200; i++) {
+    arr.push({
+      alive: false, x: 0, y: 0, vx: 0, vy: 0, r: 2, life: 0, maxLife: 1,
+      color: '#fff', additive: false, gravity: 0, rot: 0, vRot: 0, shape: 'dot',
+    });
+  }
+  return arr;
+}
 
-export function RunnerGame() {
-  const canvasRef = useRef<HTMLCanvasElement | null>(null);
-  const [phase, setPhase] = useState<Phase>('ready');
-  const [finalScore, setFinalScore] = useState(0);
-  const [roundStats, setRoundStats] = useState<RoundStats | null>(null);
-  const [copied, setCopied] = useState(false);
-  const [best, setBest] = useState<number>(() => {
-    const stored = Number(localStorage.getItem(BEST_KEY) ?? 0);
-    return Number.isNaN(stored) ? 0 : stored;
-  });
-  const [isNewBest, setIsNewBest] = useState(false);
-  const [soundOn, setSoundOn] = useState(soundEngine.enabled);
-  const [scores, setScores] = useState<ScoreRow[] | null>(null);
-  const [scoresError, setScoresError] = useState(false);
-  const [nameInput, setNameInput] = useState<string>(() => localStorage.getItem(NAME_KEY) ?? '');
-  const [teamInput, setTeamInput] = useState<string>(() => localStorage.getItem(TEAM_KEY) ?? '');
-  const [saved, setSaved] = useState(false);
-  const [saving, setSaving] = useState(false);
-  const [saveError, setSaveError] = useState<string | null>(null);
+function createTexts(): FloatText[] {
+  const arr: FloatText[] = [];
+  for (let i = 0; i < 32; i++) {
+    arr.push({ alive: false, x: 0, y: 0, vy: 0, life: 0, maxLife: 1, text: '', color: '#fff' });
+  }
+  return arr;
+}
 
-  // State hỗ trợ HUD trên giao diện React
-  const [activeBooster, setActiveBooster] = useState(false);
-  const [activeShield, setActiveShield] = useState(false);
-
-  /* Trạng thái game thuần ref để chạy vòng lặp 60fps mượt mà */
-  const g = useRef({
+function initialState(): GameState {
+  const ribbon: { x: number; y: number }[] = [];
+  for (let i = 0; i < 10; i++) ribbon.push({ x: RUNNER_X - 6 - i * 7, y: GROUND - 46 });
+  return {
     y: GROUND - RUNNER_H,
     vy: 0,
     airborne: false,
-    doubleJumpAvailable: true,
+    jumps: 0,
     sliding: false,
-    slideUntil: 0,
-    frame: 0,
+    slideTime: 0,
     speed: 4.8,
     score: 0,
-    distance: 0,
+    dist: 0,
     combo: 1,
-    comboStreak: 0,
-    maxCombo: 1,
-    maxSpeed: 4.8,
-    bottlesCount: 0,
-    medalsCount: 0,
     shield: false,
-    boosterUntil: 0,
-    shake: 0,
+    boostTime: 0,
+    runTime: 0,
+    runCycle: 0,
+    squashX: 1,
+    squashY: 1,
+    squashRecover: 0,
+    flip: 0,
+    flipping: false,
+    buffer: 0,
+    fastFall: false,
+    obstacles: [],
+    items: [],
     lastObDist: 0,
     nextGap: 420,
     lastItemDist: 0,
-    nextItemGap: 650,
-    lastMilestone: 0,
-    obstacles: [] as Obstacle[],
-    items: [] as Item[],
-    particles: [] as Particle[],
-    skidMarks: [] as SkidMark[],
-    shockwaves: [] as Shockwave[],
-    floatingTexts: [] as FloatingText[],
-  });
+    nextItemGap: 500,
+    particles: createParticles(),
+    pCursor: 0,
+    texts: createTexts(),
+    tCursor: 0,
+    ghosts: [],
+    ghostTimer: 0,
+    rings: [],
+    skidMarks: [],
+    ribbon,
+    trauma: 0,
+    camScale: 1,
+    camY: 0,
+    displayScore: 0,
+    passedKm: new Set<number>(),
+    banner: null,
+    dustTimer: 0,
+    sparkTimer: 0,
+    bottles: 0,
+    medals: 0,
+    orbs: 0,
+    crystals: 0,
+    maxSpeed: 4.8,
+    maxCombo: 1,
+    crashed: false,
+  };
+}
+
+function rankFor(score: number): { rank: string; title: string } {
+  if (score >= 10000) return { rank: 'S', title: 'Huyền thoại GEOENV' };
+  if (score >= 6000) return { rank: 'A', title: 'VĐV xuất sắc' };
+  if (score >= 3000) return { rank: 'B', title: 'VĐV triển vọng' };
+  return { rank: 'C', title: 'Người mới bắt đầu' };
+}
+
+interface FinalStats {
+  score: number;
+  km: number;
+  time: number;
+  maxSpeedKmh: number;
+  maxCombo: number;
+  items: number;
+  rank: string;
+  title: string;
+}
+
+export function RunnerGame() {
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const stateRef = useRef<GameState>(initialState());
   const phaseRef = useRef<Phase>('ready');
+  const lastTimeRef = useRef<number>(0);
 
-  const setPhaseBoth = (p: Phase) => {
-    phaseRef.current = p;
-    setPhase(p);
-  };
+  const [phase, setPhase] = useState<Phase>('ready');
+  const [soundOn, setSoundOn] = useState<boolean>(() => {
+    if (typeof window === 'undefined') return true;
+    return window.localStorage.getItem(SOUND_KEY) !== 'off';
+  });
+  const [best, setBest] = useState<number>(() => {
+    if (typeof window === 'undefined') return 0;
+    return Number(window.localStorage.getItem(BEST_KEY) ?? 0) || 0;
+  });
+  const [name, setName] = useState<string>(() => {
+    if (typeof window === 'undefined') return '';
+    return window.localStorage.getItem(NAME_KEY) ?? '';
+  });
+  const [team, setTeam] = useState<string>(() => {
+    if (typeof window === 'undefined') return '';
+    return window.localStorage.getItem(TEAM_KEY) ?? '';
+  });
+  const [saved, setSaved] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [scores, setScores] = useState<ScoreRow[]>([]);
+  const [scoresError, setScoresError] = useState(false);
+  const [finalStats, setFinalStats] = useState<FinalStats | null>(null);
 
-  const toggleSound = () => {
-    soundEngine.enabled = !soundEngine.enabled;
-    setSoundOn(soundEngine.enabled);
-    localStorage.setItem(SOUND_KEY, String(soundEngine.enabled));
-  };
-
-  const togglePause = useCallback(() => {
-    if (phaseRef.current === 'playing') {
-      setPhaseBoth('paused');
-    } else if (phaseRef.current === 'paused') {
-      setPhaseBoth('playing');
-    }
-  }, []);
-
-  const resetGame = () => {
-    g.current = {
-      y: GROUND - RUNNER_H,
-      vy: 0,
-      airborne: false,
-      doubleJumpAvailable: true,
-      sliding: false,
-      slideUntil: 0,
-      frame: 0,
-      speed: 4.8,
-      score: 0,
-      distance: 0,
-      combo: 1,
-      comboStreak: 0,
-      maxCombo: 1,
-      maxSpeed: 4.8,
-      bottlesCount: 0,
-      medalsCount: 0,
-      shield: false,
-      boosterUntil: 0,
-      shake: 0,
-      lastObDist: 0,
-      nextGap: 420,
-      lastItemDist: 0,
-      nextItemGap: 650,
-      lastMilestone: 0,
-      obstacles: [],
-      items: [],
-      particles: [],
-      skidMarks: [],
-      shockwaves: [],
-      floatingTexts: [],
-    };
-    setActiveBooster(false);
-    setActiveShield(false);
-    setCopied(false);
-  };
-
-  const startGame = () => {
-    resetGame();
-    setSaved(false);
-    setSaveError(null);
-    setIsNewBest(false);
-    setPhaseBoth('playing');
-  };
-
-  const gameOver = useCallback(() => {
-    const score = Math.floor(g.current.score);
-    const dist = Math.floor(g.current.distance);
-    const maxSpd = Number((g.current.maxSpeed * 3.2).toFixed(1));
-    let rank: 'S' | 'A' | 'B' | 'C' = 'C';
-    let rankTitle = '🥉 VĐV Triển Vọng';
-    if (score >= 3000) {
-      rank = 'S';
-      rankTitle = '🏆 Kỷ Lục Gia';
-    } else if (score >= 1500) {
-      rank = 'A';
-      rankTitle = '🥇 VĐV Xuất Sắc';
-    } else if (score >= 800) {
-      rank = 'B';
-      rankTitle = '🥈 VĐV Bền Bỉ';
-    }
-    setRoundStats({
-      score,
-      distance: dist,
-      bottles: g.current.bottlesCount,
-      medals: g.current.medalsCount,
-      maxSpeedKmh: maxSpd,
-      maxCombo: g.current.maxCombo,
-      rank,
-      rankTitle,
-    });
-    setFinalScore(score);
-    setPhaseBoth('over');
-    soundEngine.playGameOver();
-    g.current.shake = 16;
-
-    setBest((prev) => {
-      if (score > prev) {
-        localStorage.setItem(BEST_KEY, String(score));
-        setIsNewBest(true);
-        return score;
-      }
-      return prev;
-    });
-  }, []);
-
-  /* Hành động: Nhảy & Nhảy kép */
-  const jump = useCallback(() => {
-    if (phaseRef.current === 'ready') {
-      startGame();
-      return;
-    }
-    if (phaseRef.current !== 'playing') return;
-
-    const s = g.current;
-    if (s.sliding) {
-      // Hủy trượt ngay khi nhảy
-      s.sliding = false;
-    }
-
-    if (!s.airborne) {
-      // Nhảy lần 1
-      s.airborne = true;
-      s.vy = -16.8;
-      s.doubleJumpAvailable = true;
-      soundEngine.playJump(false);
-
-      // Bụi đất bật nhảy
-      for (let i = 0; i < 7; i++) {
-        s.particles.push({
-          x: RUNNER_X + 16,
-          y: GROUND,
-          vx: -1.5 - Math.random() * 2.5,
-          vy: -1 - Math.random() * 2,
-          r: 2 + Math.random() * 3,
-          color: '#d97706',
-          life: 0,
-          maxLife: 20,
-          type: 'dust',
-        });
-      }
-    } else if (s.doubleJumpAvailable) {
-      // Nhảy kép (Double jump)
-      s.doubleJumpAvailable = false;
-      s.vy = -14.5;
-      soundEngine.playJump(true);
-
-      // Hiệu ứng vòng sóng không trung
-      for (let i = 0; i < 9; i++) {
-        s.particles.push({
-          x: RUNNER_X + 18,
-          y: s.y + 35,
-          vx: (Math.random() - 0.5) * 4,
-          vy: Math.random() * 2,
-          r: 2 + Math.random() * 2.5,
-          color: '#38bdf8',
-          life: 0,
-          maxLife: 18,
-          type: 'spark',
-        });
-      }
-      s.floatingTexts.push({
-        x: RUNNER_X + 20,
-        y: s.y - 10,
-        text: 'DOUBLE JUMP!',
-        color: '#38bdf8',
-        alpha: 1,
-        scale: 1,
-      });
-    }
-  }, []);
-
-  /* Hành động: Cúi trượt sát đất (Slide / Duck) */
-  const slide = useCallback(() => {
-    if (phaseRef.current !== 'playing') return;
-    const s = g.current;
-    if (s.airborne) {
-      // Đang trên không thì hạ nhanh xuống đất
-      s.vy += 8;
-      return;
-    }
-    s.sliding = true;
-    s.slideUntil = s.frame + 28; // Trượt trong khoảng ~0.45s
-    soundEngine.playSlide();
-
-    // Hạt lửa ma sát trượt lướt
-    for (let i = 0; i < 6; i++) {
-      s.particles.push({
-        x: RUNNER_X + 4,
-        y: GROUND,
-        vx: -2 - Math.random() * 3,
-        vy: -0.5 - Math.random(),
-        r: 1.5 + Math.random() * 2,
-        color: '#f97316',
-        life: 0,
-        maxLife: 15,
-        type: 'spark',
-      });
-    }
-  }, []);
-
-  /* VÒNG LẶP RENDER CHÍNH (CANVAS 60FPS) */
   useEffect(() => {
-    let raf = 0;
-    const step = () => {
-      const canvas = canvasRef.current;
-      const ctx = canvas?.getContext('2d');
-      if (canvas && ctx) {
-        const s = g.current;
+    soundEngine.enabled = soundOn;
+    if (typeof window !== 'undefined') {
+      window.localStorage.setItem(SOUND_KEY, soundOn ? 'on' : 'off');
+    }
+  }, [soundOn]);
 
-        if (phaseRef.current === 'playing') {
-          s.frame++;
-
-          // Kiểm tra hiệu lực trượt
-          if (s.sliding && s.frame >= s.slideUntil) {
-            s.sliding = false;
-          }
-
-          // Kiểm tra hiệu lực Booster
-          const isBoosted = s.frame < s.boosterUntil;
-          if (activeBooster !== isBoosted) setActiveBooster(isBoosted);
-          if (activeShield !== s.shield) setActiveShield(s.shield);
-
-          // Vật lý trọng lực
-          if (s.airborne) {
-            s.vy += 0.88;
-            s.y += s.vy;
-            if (s.y >= GROUND - RUNNER_H) {
-              s.y = GROUND - RUNNER_H;
-              s.airborne = false;
-              s.vy = 0;
-              // Vòng sóng xung kích tiếp đất (Shockwave)
-              s.shockwaves.push({
-                x: RUNNER_X + 18,
-                y: GROUND + 1,
-                r: 4,
-                maxR: 28,
-                alpha: 0.7,
-              });
-              // Tiếp đất tạo bụi
-              for (let i = 0; i < 8; i++) {
-                s.particles.push({
-                  x: RUNNER_X + 10 + Math.random() * 20,
-                  y: GROUND,
-                  vx: -1.5 - Math.random() * 3,
-                  vy: -1 - Math.random() * 2,
-                  r: 2 + Math.random() * 3.5,
-                  color: '#b45309',
-                  life: 0,
-                  maxLife: 22,
-                  type: 'dust',
-                });
-              }
-            }
-          }
-
-          // Tính toán tốc độ: Tăng dần theo điểm, có boost x1.4
-          const baseSpeed = Math.min(4.8 + s.score * 0.0028, 15.5);
-          s.speed = isBoosted ? baseSpeed * 1.35 : baseSpeed;
-          if (s.speed > s.maxSpeed) s.maxSpeed = s.speed;
-
-          // Điểm & Quãng đường
-          const pointInc = s.speed * 0.24 * s.combo;
-          s.score += pointInc;
-          s.distance += s.speed;
-
-          // Vết trượt bánh cao su khi cúi trượt (Skid marks)
-          if (s.sliding && s.frame % 3 === 0) {
-            s.skidMarks.push({
-              x: RUNNER_X + 18,
-              w: 16,
-              alpha: 0.45,
-            });
-          }
-
-          // Sinh chướng ngại vật ngẫu nhiên
-          if (s.distance - s.lastObDist > s.nextGap) {
-            const kinds: ObKind[] = ['hurdle', 'rock', 'puddle', 'drone'];
-            const chosen = kinds[Math.floor(Math.random() * kinds.length)];
-            s.obstacles.push({ x: W + 30, kind: chosen });
-            s.lastObDist = s.distance;
-            s.nextGap = 360 + Math.random() * 320;
-          }
-
-          // Sinh vật phẩm & power-up
-          if (s.distance - s.lastItemDist > s.nextItemGap) {
-            const rand = Math.random();
-            let kind: ItemKind = 'bottle';
-            if (rand < 0.45) kind = 'bottle';
-            else if (rand < 0.75) kind = 'medal';
-            else if (rand < 0.90) kind = 'shield';
-            else kind = 'booster';
-
-            const itemY = kind === 'medal' ? GROUND - 85 : GROUND - 40;
-            s.items.push({
-              x: W + 20,
-              y: itemY,
-              kind,
-              taken: false,
-              bob: Math.random() * Math.PI,
-            });
-            s.lastItemDist = s.distance;
-            s.nextItemGap = 600 + Math.random() * 550;
-          }
-
-          // Di chuyển chướng ngại & vật phẩm
-          for (const ob of s.obstacles) ob.x -= s.speed;
-          for (const item of s.items) {
-            item.x -= s.speed;
-            // Nếu có booster: Hút vật phẩm tự động về phía người chơi (Magnet)
-            if (isBoosted && !item.taken) {
-              const dx = RUNNER_X + 18 - item.x;
-              const dy = s.y + 20 - item.y;
-              item.x += dx * 0.12;
-              item.y += dy * 0.12;
-            }
-          }
-
-          s.obstacles = s.obstacles.filter((o) => o.x + 80 > 0);
-          s.items = s.items.filter((item) => item.x + 40 > 0 && !item.taken);
-
-          // Bụi chân chạy nhịp nhàng khi ở mặt đất
-          if (!s.airborne && !s.sliding && s.frame % 5 === 0) {
-            s.particles.push({
-              x: RUNNER_X + 6,
-              y: GROUND,
-              vx: -1.2 - Math.random() * 1.5,
-              vy: -0.4 - Math.random() * 0.8,
-              r: 1.5 + Math.random() * 2,
-              color: '#d97706',
-              life: 0,
-              maxLife: 16,
-              type: 'dust',
-            });
-          }
-
-          // Cập nhật hệ thống hạt (Particles)
-          for (const p of s.particles) {
-            p.x += p.vx;
-            p.y += p.vy;
-            p.life++;
-            if (p.type === 'confetti' && p.rotation !== undefined && p.vRot !== undefined) {
-              p.rotation += p.vRot;
-              p.vy += 0.08; // Rơi nhẹ
-            }
-          }
-          s.particles = s.particles.filter((p) => p.life < p.maxLife);
-
-          // Cập nhật vệt trượt cao su (Skid marks) & sóng xung kích (Shockwaves)
-          for (const sm of s.skidMarks) {
-            sm.x -= s.speed;
-            sm.alpha -= 0.012;
-          }
-          s.skidMarks = s.skidMarks.filter((sm) => sm.alpha > 0 && sm.x + sm.w > 0);
-
-          for (const sw of s.shockwaves) {
-            sw.r += 1.8;
-            sw.alpha -= 0.035;
-          }
-          s.shockwaves = s.shockwaves.filter((sw) => sw.alpha > 0);
-
-          // Cập nhật chữ bay nổi (Floating texts)
-          for (const ft of s.floatingTexts) {
-            ft.y -= 1.2;
-            ft.alpha -= 0.02;
-            ft.scale = Math.min(1.2, ft.scale + 0.01);
-          }
-          s.floatingTexts = s.floatingTexts.filter((ft) => ft.alpha > 0);
-
-          // Kiểm tra mốc cự ly (Milestone Confetti Fireworks!)
-          const milestone = Math.floor(s.distance / 500);
-          if (milestone > s.lastMilestone && milestone > 0) {
-            s.lastMilestone = milestone;
-            soundEngine.playMilestone();
-            const milestoneM = milestone * 500;
-            s.floatingTexts.push({
-              x: W / 2,
-              y: 90,
-              text: `🎉 CHẠM MỐC ${milestoneM}M!`,
-              color: '#f59e0b',
-              alpha: 1,
-              scale: 1,
-            });
-
-            // Bắn pháo hoa giấy confetti rực rỡ
-            const confColors = ['#f43f5e', '#38bdf8', '#fbbf24', '#34d399', '#a855f7'];
-            for (let i = 0; i < 45; i++) {
-              s.particles.push({
-                x: W / 2 + (Math.random() - 0.5) * 200,
-                y: 60 + Math.random() * 40,
-                vx: (Math.random() - 0.5) * 8,
-                vy: -3 - Math.random() * 5,
-                r: 4 + Math.random() * 4,
-                color: confColors[Math.floor(Math.random() * confColors.length)],
-                life: 0,
-                maxLife: 50 + Math.random() * 30,
-                type: 'confetti',
-                rotation: Math.random() * Math.PI,
-                vRot: (Math.random() - 0.5) * 0.2,
-              });
-            }
-          }
-
-          // Hitbox của người chơi (Thay đổi linh hoạt khi cúi trượt)
-          const runnerBox = s.sliding
-            ? { x: RUNNER_X + 4, y: GROUND - 24, w: 42, h: 22 }
-            : { x: RUNNER_X + 8, y: s.y + 4, w: RUNNER_W - 14, h: RUNNER_H - 6 };
-
-          // Kiểm tra ăn vật phẩm
-          for (const item of s.items) {
-            if (!item.taken && overlaps(runnerBox, { x: item.x, y: item.y - 10, w: 22, h: 32 })) {
-              item.taken = true;
-              soundEngine.playCollect(item.kind);
-
-              if (item.kind === 'bottle') {
-                s.score += 50;
-                s.bottlesCount++;
-                s.comboStreak++;
-                if (s.comboStreak % 3 === 0) s.combo = Math.min(3, s.combo + 0.5);
-                if (s.combo > s.maxCombo) s.maxCombo = s.combo;
-                s.floatingTexts.push({
-                  x: item.x,
-                  y: item.y - 12,
-                  text: `+50 ${s.combo > 1 ? `(x${s.combo})` : ''}`,
-                  color: '#38bdf8',
-                  alpha: 1,
-                  scale: 1,
-                });
-              } else if (item.kind === 'medal') {
-                s.score += 150;
-                s.medalsCount++;
-                s.floatingTexts.push({
-                  x: item.x,
-                  y: item.y - 12,
-                  text: '+150 HUY CHƯƠNG!',
-                  color: '#fbbf24',
-                  alpha: 1,
-                  scale: 1,
-                });
-              } else if (item.kind === 'shield') {
-                s.shield = true;
-                s.floatingTexts.push({
-                  x: item.x,
-                  y: item.y - 12,
-                  text: 'KHIÊN BẢO VỆ!',
-                  color: '#0284c7',
-                  alpha: 1,
-                  scale: 1,
-                });
-              } else if (item.kind === 'booster') {
-                s.boosterUntil = s.frame + 300; // 5 giây boost
-                s.floatingTexts.push({
-                  x: item.x,
-                  y: item.y - 12,
-                  text: '⚡ SIÊU TĂNG TỐC!',
-                  color: '#eab308',
-                  alpha: 1,
-                  scale: 1,
-                });
-              }
-
-              // Hạt sao tóe ra khi nhặt vật phẩm
-              for (let i = 0; i < 9; i++) {
-                s.particles.push({
-                  x: item.x + 10,
-                  y: item.y + 10,
-                  vx: (Math.random() - 0.5) * 5,
-                  vy: (Math.random() - 0.5) * 5,
-                  r: 2 + Math.random() * 2.5,
-                  color: item.kind === 'medal' ? '#fbbf24' : '#38bdf8',
-                  life: 0,
-                  maxLife: 20,
-                  type: 'star',
-                });
-              }
-            }
-          }
-
-          // Kiểm tra va chạm chướng ngại vật
-          let hit = false;
-          for (const ob of s.obstacles) {
-            const cfg = OB_CONFIG[ob.kind];
-            const obBox = {
-              x: ob.x + 4,
-              y: GROUND - cfg.yOffset + 3,
-              w: cfg.w - 8,
-              h: cfg.h - 6,
-            };
-
-            if (overlaps(runnerBox, obBox)) {
-              if (isBoosted) {
-                // Bất tử khi đang trong trạng thái Siêu tăng tốc: Đập tan chướng ngại!
-                ob.x = -999;
-                s.floatingTexts.push({
-                  x: obBox.x,
-                  y: obBox.y - 15,
-                  text: 'SMASH! +50',
-                  color: '#eab308',
-                  alpha: 1,
-                  scale: 1,
-                });
-              } else if (s.shield) {
-                // Khiên bảo vệ đỡ 1 đòn cứu nguy!
-                s.shield = false;
-                ob.x = -999;
-                soundEngine.playShieldBreak();
-                s.shake = 10;
-                s.floatingTexts.push({
-                  x: runnerBox.x,
-                  y: runnerBox.y - 18,
-                  text: 'VỠ KHIÊN! CẨN THẬN',
-                  color: '#ef4444',
-                  alpha: 1,
-                  scale: 1,
-                });
-              } else {
-                hit = true;
-                break;
-              }
-            }
-          }
-
-          if (hit) gameOver();
-        }
-
-        // ================= XỬ LÝ VẼ RA CANVAS =================
-        const dpr = Math.min(window.devicePixelRatio || 1, 2);
-        if (canvas.width !== Math.floor(W * dpr) || canvas.height !== Math.floor(H * dpr)) {
-          canvas.width = Math.floor(W * dpr);
-          canvas.height = Math.floor(H * dpr);
-        }
-        ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-
-        ctx.save();
-
-        // Hiệu ứng Rung màn hình (Screen Shake)
-        if (s.shake > 0) {
-          const sx = (Math.random() - 0.5) * s.shake;
-          const sy = (Math.random() - 0.5) * s.shake;
-          ctx.translate(sx, sy);
-          s.shake *= 0.88;
-          if (s.shake < 0.5) s.shake = 0;
-        }
-
-        ctx.clearRect(0, 0, W, H);
-
-        // 1. Vẽ bối cảnh Parallax đa tầng
-        drawEnvironment(ctx, s.distance, s.frame);
-
-        // 1b. Vẽ vệt trượt cao su (Skid marks) trên mặt đường
-        for (const sm of s.skidMarks) {
-          ctx.fillStyle = `rgba(30, 20, 10, ${sm.alpha * 0.45})`;
-          ctx.fillRect(sm.x, GROUND + 1, sm.w, 3);
-        }
-
-        // 1c. Vẽ sóng xung kích tiếp đất (Shockwaves)
-        for (const sw of s.shockwaves) {
-          ctx.strokeStyle = `rgba(255, 255, 255, ${sw.alpha * 0.7})`;
-          ctx.lineWidth = 2;
-          ctx.beginPath();
-          ctx.ellipse(sw.x, sw.y, sw.r, sw.r * 0.35, 0, 0, Math.PI * 2);
-          ctx.stroke();
-        }
-
-        // 2. Vẽ các hạt bụi / tia lửa / confetti
-        for (const p of s.particles) {
-          ctx.save();
-          ctx.fillStyle = p.color;
-          ctx.globalAlpha = Math.max(0, 1 - p.life / p.maxLife);
-          if (p.type === 'confetti' && p.rotation !== undefined) {
-            ctx.translate(p.x, p.y);
-            ctx.rotate(p.rotation);
-            ctx.fillRect(-p.r, -p.r / 2, p.r * 2, p.r);
-          } else {
-            ctx.beginPath();
-            ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
-            ctx.fill();
-          }
-          ctx.restore();
-        }
-
-        // 3. Vẽ vật phẩm thu thập
-        for (const item of s.items) {
-          drawItem(ctx, item, s.frame);
-        }
-
-        // 4. Vẽ chướng ngại vật
-        for (const ob of s.obstacles) {
-          drawObstacle(ctx, ob, s.frame);
-        }
-
-        // 5. Vẽ nhân vật vận động viên
-        drawRunner(
-          ctx,
-          s.y,
-          s.frame,
-          s.airborne,
-          s.sliding,
-          s.shield,
-          s.frame < s.boosterUntil,
-          phaseRef.current === 'over',
-          s.speed,
-        );
-
-        // 6. Vệt gió tốc độ cao khi chạy siêu nhanh
-        if (s.speed > 8.5 && phaseRef.current === 'playing') {
-          ctx.strokeStyle = 'rgba(255, 255, 255, 0.6)';
-          ctx.lineWidth = 2;
-          for (let i = 0; i < 5; i++) {
-            const ly = 30 + ((i * 47 + s.frame * 4) % 190);
-            const lx = ((i * 241 + s.frame * 8) % (W + 200)) - 100;
-            ctx.beginPath();
-            ctx.moveTo(lx, ly);
-            ctx.lineTo(lx + 65, ly);
-            ctx.stroke();
-          }
-          // Vệt gió ngắn phía dưới gần đường
-          if (s.speed > 11) {
-            ctx.strokeStyle = 'rgba(255, 255, 255, 0.35)';
-            ctx.lineWidth = 1.5;
-            for (let i = 0; i < 4; i++) {
-              const ly2 = GROUND + 8 + ((i * 31 + s.frame * 5) % 40);
-              const lx2 = ((i * 173 + s.frame * 10) % (W + 150)) - 75;
-              ctx.beginPath();
-              ctx.moveTo(lx2, ly2);
-              ctx.lineTo(lx2 + 45, ly2);
-              ctx.stroke();
-            }
-          }
-        }
-
-        // 6b. VIGNETTE — hiệu ứng tối viền khung hình cinematic
-        const vigGrad = ctx.createRadialGradient(W / 2, H / 2, H * 0.45, W / 2, H / 2, W * 0.72);
-        vigGrad.addColorStop(0, 'rgba(0, 0, 0, 0)');
-        vigGrad.addColorStop(1, 'rgba(0, 0, 0, 0.28)');
-        ctx.fillStyle = vigGrad;
-        ctx.fillRect(0, 0, W, H);
-
-        // 7. Vẽ chữ bay nổi (Floating score/milestone texts)
-        for (const ft of s.floatingTexts) {
-          ctx.save();
-          ctx.globalAlpha = Math.max(0, ft.alpha);
-          ctx.fillStyle = ft.color;
-          ctx.font = `bold ${Math.floor(18 * ft.scale)}px sans-serif`;
-          ctx.textAlign = 'center';
-          ctx.shadowColor = 'rgba(0, 0, 0, 0.5)';
-          ctx.shadowBlur = 6;
-          ctx.fillText(ft.text, ft.x, ft.y);
-          ctx.restore();
-        }
-
-        // 8. BẢNG HUD HIỂN THỊ ĐIỂM & CHỈ SỐ TRONG CANVAS
-        ctx.fillStyle = 'rgba(15, 23, 42, 0.75)';
-        roundRect(ctx, W - 210, 12, 196, 68, 14);
-        ctx.fill();
-        ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
-        ctx.lineWidth = 1;
-        ctx.stroke();
-
-        ctx.textAlign = 'right';
-        ctx.fillStyle = '#f8fafc';
-        ctx.font = 'bold 22px sans-serif';
-        ctx.fillText(`${Math.floor(s.score)} m`, W - 26, 38);
-
-        ctx.font = 'bold 12px sans-serif';
-        ctx.fillStyle = '#fbbf24';
-        const speedKmh = (s.speed * 3.2).toFixed(1);
-        ctx.fillText(`Tốc độ: ${speedKmh} km/h`, W - 26, 56);
-
-        if (s.combo > 1) {
-          ctx.fillStyle = '#38bdf8';
-          ctx.fillText(`Combo x${s.combo}`, W - 26, 72);
-        }
-
-        // 8b. THANH CỰ LY MINI (Mini Milestone Progress Bar ở giữa đỉnh)
-        const nextMileDist = (Math.floor(s.distance / 500) + 1) * 500;
-        const currSegment = s.distance % 500;
-        const barW = 180;
-        const barH = 12;
-        const barX = W / 2 - barW / 2;
-        const barY = 16;
-        ctx.fillStyle = 'rgba(15, 23, 42, 0.75)';
-        roundRect(ctx, barX - 10, barY - 4, barW + 20, barH + 8, 8);
-        ctx.fill();
-        ctx.strokeStyle = 'rgba(255, 255, 255, 0.15)';
-        ctx.lineWidth = 1;
-        ctx.stroke();
-        ctx.fillStyle = 'rgba(255, 255, 255, 0.15)';
-        roundRect(ctx, barX, barY, barW, barH, 5);
-        ctx.fill();
-        const fillW = Math.min(barW, Math.max(6, (currSegment / 500) * barW));
-        const progGrad = ctx.createLinearGradient(barX, 0, barX + fillW, 0);
-        progGrad.addColorStop(0, '#0284c7');
-        progGrad.addColorStop(1, '#38bdf8');
-        ctx.fillStyle = progGrad;
-        roundRect(ctx, barX, barY, fillW, barH, 5);
-        ctx.fill();
-        ctx.fillStyle = '#f8fafc';
-        ctx.font = 'bold 9px sans-serif';
-        ctx.textAlign = 'center';
-        ctx.fillText(`Mốc tiếp: ${nextMileDist}m`, W / 2, barY + 9);
-
-        // Icon chỉ báo trạng thái năng lực góc trái trên
-        let buffX = 16;
-        if (s.shield) {
-          ctx.fillStyle = 'rgba(2, 132, 199, 0.85)';
-          roundRect(ctx, buffX, 14, 96, 30, 8);
-          ctx.fill();
-          ctx.fillStyle = '#ffffff';
-          ctx.font = 'bold 12px sans-serif';
-          ctx.textAlign = 'left';
-          ctx.fillText('🛡 KHIÊN ON', buffX + 10, 34);
-          buffX += 104;
-        }
-        if (s.frame < s.boosterUntil) {
-          const timeLeft = ((s.boosterUntil - s.frame) / 60).toFixed(1);
-          ctx.fillStyle = 'rgba(202, 138, 4, 0.85)';
-          roundRect(ctx, buffX, 14, 102, 30, 8);
-          ctx.fill();
-          ctx.fillStyle = '#ffffff';
-          ctx.font = 'bold 12px sans-serif';
-          ctx.textAlign = 'left';
-          ctx.fillText(`⚡ BOOST ${timeLeft}s`, buffX + 8, 34);
-
-          // Thanh đếm ngược năng lượng Booster dưới mini bar
-          const boostFraction = (s.boosterUntil - s.frame) / 300;
-          const bW = 120;
-          const bX = W / 2 - bW / 2;
-          const bY = 40;
-          ctx.fillStyle = 'rgba(202, 138, 4, 0.25)';
-          roundRect(ctx, bX - 4, bY - 2, bW + 8, 10, 5);
-          ctx.fill();
-          ctx.fillStyle = '#eab308';
-          roundRect(ctx, bX, bY, Math.max(4, bW * boostFraction), 6, 3);
-          ctx.fill();
-        }
-
-        // Màn hình tạm dừng (Paused)
-        if (phaseRef.current === 'paused') {
-          ctx.fillStyle = 'rgba(15, 23, 42, 0.75)';
-          ctx.fillRect(0, 0, W, H);
-
-          ctx.fillStyle = 'rgba(255, 255, 255, 0.96)';
-          roundRect(ctx, W / 2 - 200, H / 2 - 70, 400, 140, 20);
-          ctx.fill();
-
-          ctx.textAlign = 'center';
-          ctx.fillStyle = '#0f172a';
-          ctx.font = 'bold 26px sans-serif';
-          ctx.fillText('⏸️ ĐÃ TẠM DỪNG', W / 2, H / 2 - 20);
-
-          ctx.font = '15px sans-serif';
-          ctx.fillStyle = '#475569';
-          ctx.fillText('Nhấn Phím P hoặc bấm nút để tiếp tục chạy', W / 2, H / 2 + 10);
-
-          ctx.fillStyle = '#0284c7';
-          ctx.font = 'bold 15px sans-serif';
-          ctx.fillText('👉 Bấm vào khung để TIẾP TỤC', W / 2, H / 2 + 38);
-        }
-
-        // Màn hình khởi động (Ready)
-        if (phaseRef.current === 'ready') {
-          ctx.fillStyle = 'rgba(15, 23, 42, 0.75)';
-          ctx.fillRect(0, 0, W, H);
-
-          ctx.fillStyle = 'rgba(255, 255, 255, 0.96)';
-          roundRect(ctx, W / 2 - 250, H / 2 - 80, 500, 160, 20);
-          ctx.fill();
-
-          ctx.textAlign = 'center';
-          ctx.fillStyle = '#0f172a';
-          ctx.font = 'bold 28px sans-serif';
-          ctx.fillText('🏃 GEOENV RUN 2026', W / 2, H / 2 - 32);
-
-          ctx.font = '15px sans-serif';
-          ctx.fillStyle = '#475569';
-          ctx.fillText('Nhảy: Phím Cách / Mũi tên lên (Nhấn 2 lần để nhảy kép)', W / 2, H / 2);
-          ctx.fillText('Cúi trượt: Mũi tên xuống / Phím S · Tạm dừng: Phím P', W / 2, H / 2 + 24);
-
-          ctx.fillStyle = '#0284c7';
-          ctx.font = 'bold 16px sans-serif';
-          ctx.fillText('👉 Bấm vào khung hoặc nhấn Phím Cách để BẮT ĐẦU!', W / 2, H / 2 + 56);
-        }
-
-        ctx.restore();
-      }
-      raf = requestAnimationFrame(step);
-    };
-    raf = requestAnimationFrame(step);
-    return () => cancelAnimationFrame(raf);
-  }, [gameOver, activeBooster, activeShield]);
-
-  /* Bắt phím điều khiển bàn phím (Cách, Mũi tên lên, Mũi tên xuống, W, S, P) */
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.code === 'KeyP' || e.code === 'Escape') {
-        e.preventDefault();
-        togglePause();
-      } else if (e.code === 'Space' || e.code === 'ArrowUp' || e.key === 'w' || e.key === 'W') {
-        e.preventDefault();
-        jump();
-      } else if (e.code === 'ArrowDown' || e.key === 's' || e.key === 'S') {
-        e.preventDefault();
-        slide();
-      }
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, [jump, slide, togglePause]);
-
-  /* Tải bảng xếp hạng từ Supabase */
   const loadScores = useCallback(async () => {
     const { data, error } = await supabase
       .from('game_scores')
@@ -2629,7 +1164,6 @@ export function RunnerGame() {
       setScoresError(true);
       return;
     }
-    setScoresError(false);
     setScores((data ?? []) as ScoreRow[]);
   }, []);
 
@@ -2637,356 +1171,1007 @@ export function RunnerGame() {
     void loadScores();
   }, [loadScores]);
 
-  /* Lưu điểm vào bảng xếp hạng Supabase */
-  const saveScore = async () => {
-    const name = nameInput.trim();
-    if (!name) {
-      setSaveError('Vui lòng nhập tên để lưu điểm.');
-      return;
+  const setPhaseBoth = useCallback((p: Phase) => {
+    phaseRef.current = p;
+    setPhase(p);
+  }, []);
+
+  const startGame = useCallback(() => {
+    stateRef.current = initialState();
+    setSaved(false);
+    setFinalStats(null);
+    soundEngine.unlock();
+    soundEngine.click();
+    setPhaseBoth('playing');
+  }, [setPhaseBoth]);
+
+  const togglePause = useCallback(() => {
+    if (phaseRef.current === 'playing') setPhaseBoth('paused');
+    else if (phaseRef.current === 'paused') setPhaseBoth('playing');
+  }, [setPhaseBoth]);
+
+  /* ---- Pool: hạt / chữ nổi (tái sử dụng, không cấp phát trong loop) ---- */
+  const spawnParticle = useCallback((p: Omit<Particle, 'alive' | 'life'>) => {
+    const s = stateRef.current;
+    const slot = s.particles[s.pCursor];
+    s.pCursor = (s.pCursor + 1) % s.particles.length;
+    Object.assign(slot, p, { alive: true, life: 0 });
+  }, []);
+
+  const spawnText = useCallback((x: number, y: number, text: string, color: string) => {
+    const s = stateRef.current;
+    const slot = s.texts[s.tCursor];
+    s.tCursor = (s.tCursor + 1) % s.texts.length;
+    Object.assign(slot, { alive: true, x, y, vy: -70, life: 0, maxLife: 1.1, text, color });
+  }, []);
+
+  const burst = useCallback(
+    (x: number, y: number, color: string, count: number, additive: boolean) => {
+      for (let i = 0; i < count; i++) {
+        const a = Math.random() * Math.PI * 2;
+        const sp = 1 + Math.random() * 3;
+        spawnParticle({
+          x,
+          y,
+          vx: Math.cos(a) * sp,
+          vy: Math.sin(a) * sp - 1,
+          r: 1.5 + Math.random() * 2.5,
+          maxLife: 0.4 + Math.random() * 0.4,
+          color,
+          additive,
+          gravity: 2.5,
+          rot: Math.random() * Math.PI,
+          vRot: (Math.random() - 0.5) * 0.4,
+          shape: Math.random() > 0.5 ? 'spark' : 'dot',
+        });
+      }
+    },
+    [spawnParticle],
+  );
+
+  const doJump = useCallback(() => {
+    const s = stateRef.current;
+    if (!s.airborne) {
+      s.airborne = true;
+      s.jumps = 1;
+      s.vy = -16.5;
+      s.squashX = 0.82;
+      s.squashY = 1.22;
+      soundEngine.jump();
+      for (let i = 0; i < 6; i++) {
+        spawnParticle({
+          x: RUNNER_X + 6 + Math.random() * 20,
+          y: GROUND,
+          vx: -1 - Math.random() * 2,
+          vy: -0.5 - Math.random(),
+          r: 1.5 + Math.random() * 2,
+          maxLife: 0.4,
+          color: '#d97706',
+          additive: false,
+          gravity: 1,
+          rot: 0,
+          vRot: 0,
+          shape: 'dot',
+        });
+      }
+    } else if (s.jumps === 1) {
+      /* Nhảy kép: lộn vòng 360° + vòng sóng xung kích dưới chân. */
+      s.jumps = 2;
+      s.vy = -15;
+      s.flipping = true;
+      s.flip = 0;
+      s.rings.push({ x: RUNNER_X + 18, y: GROUND + 1, r: 4, maxR: 34, alpha: 0.7 });
+      soundEngine.doubleJump();
     }
-    if (finalScore > MAX_SCORE) {
-      setSaveError('Điểm vượt giới hạn, không lưu được.');
+  }, [spawnParticle]);
+
+  const pressJump = useCallback(() => {
+    if (phaseRef.current !== 'playing') return;
+    const s = stateRef.current;
+    if (!s.airborne) {
+      doJump();
+    } else if (s.jumps === 1) {
+      doJump();
+    } else {
+      /* Hết lượt nhảy: ghi nhớ phím 120ms để tự nhảy ngay khi chạm đất. */
+      s.buffer = 0.12;
+    }
+  }, [doJump]);
+
+  const pressSlide = useCallback(() => {
+    if (phaseRef.current !== 'playing') return;
+    const s = stateRef.current;
+    if (s.airborne) {
+      /* Fast-fall: rơi nhanh gấp 2.5 lần trọng lực. */
+      s.fastFall = true;
+    } else {
+      s.sliding = true;
+      s.slideTime = 0.55;
+    }
+  }, []);
+
+  const finishRun = useCallback(() => {
+    const s = stateRef.current;
+    if (s.crashed) return;
+    s.crashed = true;
+    soundEngine.crash();
+    const finalScore = Math.floor(s.score);
+    const stats: FinalStats = {
+      score: finalScore,
+      km: s.dist / 1000,
+      time: s.runTime,
+      maxSpeedKmh: s.maxSpeed * 3.2,
+      maxCombo: s.maxCombo,
+      items: s.bottles + s.medals + s.orbs + s.crystals,
+      ...rankFor(finalScore),
+    };
+    setFinalStats(stats);
+    if (typeof window !== 'undefined') {
+      const prevBest = Number(window.localStorage.getItem(BEST_KEY) ?? 0) || 0;
+      if (finalScore > prevBest) {
+        window.localStorage.setItem(BEST_KEY, String(finalScore));
+        setBest(finalScore);
+      }
+    }
+    setPhaseBoth('over');
+  }, [setPhaseBoth]);
+
+/* ---------------- Vòng lặp game: vật lý dt + va chạm -------------------- */
+  const clockRef = useRef(0);
+
+  const updateGame = useCallback(
+    (dtSec: number) => {
+      const s = stateRef.current;
+      const dt60 = dtSec * 60;
+      const isBoosted = s.boostTime > 0;
+      if (s.boostTime > 0) s.boostTime -= dtSec;
+      if (s.buffer > 0) s.buffer -= dtSec;
+      s.runTime += dtSec;
+
+      /* Trượt: đếm ngược thời gian trượt. */
+      if (s.sliding) {
+        s.slideTime -= dtSec;
+        if (s.slideTime <= 0) s.sliding = false;
+      }
+
+      /* Vật lý nhảy: trọng lực, fast-fall ×2.5, tiếp đất đàn hồi. */
+      const gravity = (s.fastFall ? 2.5 : 1) * 0.9;
+      s.vy += gravity * dt60;
+      s.y += s.vy * dt60;
+      if (s.y >= GROUND - RUNNER_H) {
+        if (s.airborne) {
+          s.airborne = false;
+          s.jumps = 0;
+          s.fastFall = false;
+          s.vy = 0;
+          s.y = GROUND - RUNNER_H;
+          s.squashX = 1.25;
+          s.squashY = 0.78;
+          s.squashRecover = 0.15;
+          soundEngine.land();
+          burst(RUNNER_X + 18, GROUND, '#b45309', 8, false);
+          s.rings.push({ x: RUNNER_X + 18, y: GROUND + 1, r: 4, maxR: 28, alpha: 0.7 });
+          if (s.buffer > 0) {
+            s.buffer = 0;
+            doJump();
+          }
+        } else {
+          s.y = GROUND - RUNNER_H;
+          s.vy = 0;
+        }
+      }
+      /* Chu kỳ chạy tỉ lệ thuận với tốc độ. */
+      if (!s.airborne && !s.sliding) s.runCycle += dtSec * (7 + s.speed * 0.9);
+
+      /* Lộn vòng nhảy kép: xoay 360° với tốc độ góc đều. */
+      if (s.flipping) {
+        s.flip += dtSec * 9;
+        if (s.flip >= Math.PI * 2) {
+          s.flip = 0;
+          s.flipping = false;
+        }
+      }
+
+      /* Squash & stretch: lò xo nội suy về mục tiêu (takeoff/apex/land/slide). */
+      if (s.squashRecover > 0) s.squashRecover -= dtSec;
+      const targetX = s.sliding ? 1.35 : s.squashRecover > 0 ? 1.25 : 1;
+      const targetY = s.sliding ? 0.65 : s.squashRecover > 0 ? 0.78 : 1;
+      const k = 1 - Math.exp(-14 * dtSec);
+      s.squashX += (targetX - s.squashX) * k;
+      s.squashY += (targetY - s.squashY) * k;
+
+      /* Tốc độ: tăng theo điểm, boost ×1.35, trần 15.5. */
+      const baseSpeed = Math.min(4.8 + s.score * 0.0028, 15.5);
+      s.speed = isBoosted ? baseSpeed * 1.35 : baseSpeed;
+      if (s.speed > s.maxSpeed) s.maxSpeed = s.speed;
+
+      /* Điểm + quãng đường (trần 100000, khớp CHECK của bảng). */
+      if (s.score < MAX_SCORE) {
+        s.score = Math.min(s.score + s.speed * 0.24 * s.combo * dt60, MAX_SCORE);
+      }
+      s.dist += s.speed * dt60;
+
+      /* Mốc KM: banner trượt từ trên xuống. */
+      for (const km of [1, 3, 5, 10]) {
+        if (s.dist >= km * 1000 && !s.passedKm.has(km)) {
+          s.passedKm.add(km);
+          s.banner = { text: `${km}KM FINISHER!`, t: 0 };
+          soundEngine.milestone();
+        }
+      }
+      if (s.banner) {
+        s.banner.t += dtSec;
+        if (s.banner.t > 2.2) s.banner = null;
+      }
+
+      /* Sinh chướng ngại: 65% tầm thấp, 35% tầm cao (phải trượt). */
+      if (s.dist - s.lastObDist > s.nextGap) {
+        const low: ObKind[] = ['hurdle', 'rock', 'puddle', 'barrel'];
+        const high: ObKind[] = ['drone', 'branch', 'sign'];
+        const pool = Math.random() < 0.65 ? low : high;
+        const kind = pool[Math.floor(Math.random() * pool.length)];
+        s.obstacles.push({ x: W + 30, kind, seed: Math.random() });
+        s.lastObDist = s.dist;
+        s.nextGap = 360 + Math.random() * 320;
+      }
+
+      /* Sinh vật phẩm. */
+      if (s.dist - s.lastItemDist > s.nextItemGap) {
+        const r = Math.random();
+        let kind: ItemKind = 'bottle';
+        if (r < 0.35) kind = 'bottle';
+        else if (r < 0.55) kind = 'medal';
+        else if (r < 0.7) kind = 'eco';
+        else if (r < 0.8) kind = 'crystal';
+        else if (r < 0.92) kind = 'shield';
+        else kind = 'booster';
+        const itemY = kind === 'medal' || kind === 'crystal' ? GROUND - 85 : GROUND - 40;
+        s.items.push({ x: W + 20, y: itemY, kind, taken: false, bob: Math.random() * Math.PI });
+        s.lastItemDist = s.dist;
+        s.nextItemGap = 600 + Math.random() * 550;
+      }
+
+      /* Di chuyển thế giới + hút vật phẩm khi boost. */
+      for (const ob of s.obstacles) ob.x -= s.speed * dt60;
+      for (const item of s.items) {
+        item.x -= s.speed * dt60;
+        if (isBoosted && !item.taken) {
+          item.x += (RUNNER_X + 18 - item.x) * 0.12 * dt60;
+          item.y += (s.y + 20 - item.y) * 0.12 * dt60;
+        }
+      }
+      s.obstacles = s.obstacles.filter((o) => o.x + 80 > 0);
+      s.items = s.items.filter((item) => item.x + 40 > 0 && !item.taken);
+
+      /* Bụi chân + tia lửa trượt + vệt trượt. */
+      if (!s.airborne && !s.sliding) {
+        s.dustTimer += dtSec;
+        if (s.dustTimer > 0.08) {
+          s.dustTimer = 0;
+          spawnParticle({
+            x: RUNNER_X + 6,
+            y: GROUND,
+            vx: -1.2 - Math.random() * 1.5,
+            vy: -0.4 - Math.random() * 0.8,
+            r: 1.5 + Math.random() * 2,
+            maxLife: 0.35,
+            color: '#d97706',
+            additive: false,
+            gravity: 1,
+            rot: 0,
+            vRot: 0,
+            shape: 'dot',
+          });
+        }
+      }
+      if (s.sliding) {
+        s.sparkTimer += dtSec;
+        if (s.sparkTimer > 0.05) {
+          s.sparkTimer = 0;
+          spawnParticle({
+            x: RUNNER_X + 30,
+            y: GROUND,
+            vx: -3 - Math.random() * 3,
+            vy: -1 - Math.random() * 2,
+            r: 1 + Math.random() * 1.5,
+            maxLife: 0.3,
+            color: '#fdba74',
+            additive: true,
+            gravity: 2,
+            rot: 0,
+            vRot: 0,
+            shape: 'spark',
+          });
+          s.skidMarks.push({ x: RUNNER_X + 18, alpha: 0.45 });
+          if (s.skidMarks.length > 40) s.skidMarks.shift();
+        }
+      }
+      for (const sm of s.skidMarks) {
+        sm.x -= s.speed * dt60;
+        sm.alpha -= dtSec * 1.2;
+      }
+      s.skidMarks = s.skidMarks.filter((sm) => sm.alpha > 0);
+
+      /* Hạt / chữ nổi / vòng sóng / dư ảnh. */
+      for (const p of s.particles) {
+        if (!p.alive) continue;
+        p.x += p.vx * dt60;
+        p.y += p.vy * dt60;
+        p.vy += p.gravity * dt60;
+        p.rot += p.vRot * dt60;
+        p.life += dtSec;
+        if (p.life >= p.maxLife) p.alive = false;
+      }
+      for (const ft of s.texts) {
+        if (!ft.alive) continue;
+        ft.y += ft.vy * dtSec;
+        ft.vy += 25 * dtSec;
+        ft.life += dtSec;
+        if (ft.life >= ft.maxLife) ft.alive = false;
+      }
+      for (const ring of s.rings) {
+        ring.r += 130 * dtSec;
+        ring.alpha -= dtSec * 2.2;
+      }
+      s.rings = s.rings.filter((ring) => ring.alpha > 0);
+      if (isBoosted || s.flipping) {
+        s.ghostTimer += dtSec;
+        if (s.ghostTimer > 0.08) {
+          s.ghostTimer = 0;
+          s.ghosts.push({ x: RUNNER_X, y: s.y, pose: s.runCycle, life: 0.35 });
+        }
+      }
+      for (const g of s.ghosts) g.life -= dtSec;
+      s.ghosts = s.ghosts.filter((g) => g.life > 0);
+
+      /* Ruy băng: 10 điểm nối tiếp, trễ dần + sóng sin theo gió. */
+      const anchor = { x: RUNNER_X + 4, y: s.y + 8 };
+      const pts = s.ribbon;
+      pts[0].x += (anchor.x - pts[0].x) * 0.6;
+      pts[0].y += (anchor.y - pts[0].y) * 0.6;
+      for (let i = 1; i < pts.length; i++) {
+        const tx = pts[i - 1].x - 7;
+        const ty = pts[i - 1].y + Math.sin(clockRef.current * 9 - i * 0.9) * 1.8;
+        pts[i].x += (tx - pts[i].x) * 0.45;
+        pts[i].y += (ty - pts[i].y) * 0.45;
+      }
+
+      /* Camera: zoom out khi nhanh/cao, lia Y theo độ cao, rung giảm chấn. */
+      const heightAbove = Math.max(0, GROUND - RUNNER_H - s.y);
+      const targetScale = s.speed > 11 || heightAbove > 60 ? 0.94 : 1;
+      s.camScale += (targetScale - s.camScale) * (1 - Math.exp(-3 * dtSec));
+      const targetCamY = s.airborne ? -heightAbove * 0.22 : 0;
+      s.camY += (targetCamY - s.camY) * (1 - Math.exp(-4 * dtSec));
+      s.trauma = Math.max(0, s.trauma - dtSec * 1.6);
+
+      /* Điểm hiển thị lăn mượt về điểm thật (rolling counter). */
+      s.displayScore += (s.score - s.displayScore) * (1 - Math.exp(-8 * dtSec));
+
+      /* Va chạm chướng ngại. */
+      const runnerBox = s.sliding
+        ? { x: RUNNER_X + 2, y: s.y + 26, w: 44, h: 22 }
+        : { x: RUNNER_X + 4, y: s.y + 4, w: 28, h: 44 };
+      for (const ob of s.obstacles) {
+        const box = OB_BOX[ob.kind];
+        const obBox = { x: ob.x, y: box.yTop, w: box.w, h: box.h };
+        const hit =
+          runnerBox.x < obBox.x + obBox.w &&
+          runnerBox.x + runnerBox.w > obBox.x &&
+          runnerBox.y < obBox.y + obBox.h &&
+          runnerBox.y + runnerBox.h > obBox.y;
+        if (!hit) continue;
+        if (s.shield) {
+          s.shield = false;
+          s.obstacles = s.obstacles.filter((o) => o !== ob);
+          s.trauma = 0.6;
+          soundEngine.shieldBreak();
+          spawnText(RUNNER_X + 18, s.y - 10, 'KHIÊN VỠ!', '#f59e0b');
+        } else {
+          finishRun();
+          return;
+        }
+      }
+
+      /* Nhặt vật phẩm. */
+      for (const item of s.items) {
+        if (item.taken) continue;
+        const hit =
+          runnerBox.x - 4 < item.x + 24 &&
+          runnerBox.x + runnerBox.w + 4 > item.x &&
+          runnerBox.y - 4 < item.y + 24 &&
+          runnerBox.y + runnerBox.h + 4 > item.y;
+        if (!hit) continue;
+        item.taken = true;
+        const value = ITEM_VALUE[item.kind];
+        if (value > 0) {
+          s.score = Math.min(s.score + value, MAX_SCORE);
+          s.combo = Math.min(s.combo + 0.25, 3);
+          if (s.combo > s.maxCombo) s.maxCombo = s.combo;
+          soundEngine.coin();
+        } else {
+          soundEngine.powerup();
+        }
+        switch (item.kind) {
+          case 'bottle':
+            s.bottles += 1;
+            spawnText(item.x, item.y - 8, '+50', '#0ea5e9');
+            burst(item.x + 12, item.y + 12, '#38bdf8', 8, false);
+            break;
+          case 'medal':
+            s.medals += 1;
+            spawnText(item.x, item.y - 8, '+150', '#ca8a04');
+            burst(item.x + 12, item.y + 12, '#facc15', 10, true);
+            break;
+          case 'eco':
+            s.orbs += 1;
+            spawnText(item.x, item.y - 8, '+30 ECO', '#16a34a');
+            burst(item.x + 12, item.y + 12, '#22c55e', 12, true);
+            break;
+          case 'crystal':
+            s.crystals += 1;
+            spawnText(item.x, item.y - 8, '+80 GEO', '#a855f7');
+            burst(item.x + 12, item.y + 12, '#c084fc', 20, true);
+            break;
+          case 'shield':
+            s.shield = true;
+            spawnText(item.x, item.y - 8, 'KHIÊN!', '#3b82f6');
+            burst(item.x + 12, item.y + 12, '#60a5fa', 10, true);
+            break;
+          case 'booster':
+            s.boostTime = 4;
+            spawnText(item.x, item.y - 8, 'TĂNG TỐC!', '#f59e0b');
+            burst(item.x + 12, item.y + 12, '#facc15', 12, true);
+            break;
+        }
+      }
+    },
+    [burst, doJump, finishRun, spawnParticle, spawnText],
+  );
+
+/* ---------------- Vẽ toàn cảnh: camera + HUD thể thao -------------------- */
+  const drawScene = useCallback(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return;
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const s = stateRef.current;
+    const time = clockRef.current;
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, W, H);
+
+    /* Camera: zoom + lia Y + rung giảm chấn. */
+    const sh = s.trauma * s.trauma * 12;
+    const shX = (Math.random() - 0.5) * 2 * sh;
+    const shY = (Math.random() - 0.5) * 2 * sh;
+    ctx.save();
+    ctx.translate(W / 2, H / 2);
+    ctx.scale(s.camScale, s.camScale);
+    ctx.translate(-W / 2 + shX, -H / 2 + s.camY + shY);
+
+    drawEnvironment(ctx, s.dist, time);
+
+    for (const sm of s.skidMarks) {
+      ctx.fillStyle = `rgba(15, 23, 42, ${sm.alpha * 0.5})`;
+      ctx.fillRect(sm.x, GROUND - 2, 16, 3);
+    }
+
+    /* Dư ảnh tốc độ (ghost) khi boost hoặc lộn vòng. */
+    for (const g of s.ghosts) {
+      const alpha = (g.life / 0.35) * 0.3;
+      ctx.fillStyle = `rgba(6, 182, 212, ${alpha})`;
+      roundRectPath(ctx, g.x + 2, g.y + 8, 32, 40, 8);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.arc(g.x + 18, g.y + 8, 8, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    drawRibbon(ctx, s.ribbon);
+    drawRunner(ctx, {
+      top: s.y,
+      runCycle: s.runCycle,
+      lean: Math.min(0.22, s.speed * 0.012),
+      squashX: s.squashX,
+      squashY: s.squashY,
+      flip: s.flip,
+      sliding: s.sliding,
+      airborne: s.airborne,
+    });
+
+    /* Vòng khiên + hào quang booster quanh VĐV. */
+    if (s.shield) {
+      ctx.strokeStyle = 'rgba(59, 130, 246, 0.85)';
+      ctx.lineWidth = 2.5;
+      ctx.beginPath();
+      ctx.arc(RUNNER_X + 18, s.y + 25, 34, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.strokeStyle = 'rgba(147, 197, 253, 0.9)';
+      ctx.beginPath();
+      ctx.arc(RUNNER_X + 18, s.y + 25, 34, time * 3, time * 3 + 1.4);
+      ctx.stroke();
+    }
+    if (s.boostTime > 0) {
+      const aura = ctx.createRadialGradient(
+        RUNNER_X + 18, s.y + 25, 4, RUNNER_X + 18, s.y + 25, 52,
+      );
+      aura.addColorStop(0, 'rgba(250, 204, 21, 0.35)');
+      aura.addColorStop(1, 'rgba(250, 204, 21, 0)');
+      ctx.fillStyle = aura;
+      ellipse(ctx, RUNNER_X + 18, s.y + 25, 52, 52);
+      ctx.fill();
+    }
+
+    for (const ob of s.obstacles) drawObstacle(ctx, ob, time);
+    for (const item of s.items) {
+      if (!item.taken) drawItem(ctx, item, time);
+    }
+
+    /* Hạt: vẽ hạt thường trước, hạt năng lượng bằng additive blending. */
+    for (const pass of [false, true]) {
+      ctx.save();
+      if (pass) ctx.globalCompositeOperation = 'lighter';
+      for (const p of s.particles) {
+        if (!p.alive || p.additive !== pass) continue;
+        const alpha = Math.max(0, 1 - p.life / p.maxLife);
+        ctx.globalAlpha = alpha;
+        ctx.fillStyle = p.color;
+        if (p.shape === 'rect' || p.shape === 'spark') {
+          ctx.save();
+          ctx.translate(p.x, p.y);
+          ctx.rotate(p.rot);
+          ctx.fillRect(-p.r, -p.r / 2, p.r * 2, p.r);
+          ctx.restore();
+        } else {
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+      ctx.restore();
+    }
+    ctx.globalAlpha = 1;
+
+    for (const ring of s.rings) {
+      ctx.strokeStyle = `rgba(34, 197, 94, ${ring.alpha})`;
+      ctx.lineWidth = 2.5;
+      ctx.beginPath();
+      ctx.arc(ring.x, ring.y, ring.r, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+
+    /* Chữ nổi: phóng to overshoot lúc mới xuất hiện, bay theo parabol. */
+    ctx.textAlign = 'center';
+    for (const ft of s.texts) {
+      if (!ft.alive) continue;
+      const scale =
+        ft.life < 0.15 ? 0.6 + (ft.life / 0.15) * 0.6 : 1.2 - Math.min(0.2, (ft.life - 0.15) * 0.4);
+      const alpha = ft.life > 0.7 ? Math.max(0, (ft.maxLife - ft.life) / 0.4) : 1;
+      ctx.save();
+      ctx.globalAlpha = alpha;
+      ctx.font = `800 ${Math.round(14 * scale)}px sans-serif`;
+      ctx.fillStyle = ft.color;
+      ctx.fillText(ft.text, ft.x, ft.y);
+      ctx.restore();
+    }
+
+    /* Vệt xé gió khi tốc độ cao hoặc đang boost. */
+    if (phaseRef.current === 'playing' && (s.speed > 9 || s.boostTime > 0)) {
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.2)';
+      ctx.lineWidth = 2;
+      for (let i = 0; i < 6; i++) {
+        const ly = 30 + ((i * 53) % 200);
+        const lx = W - ((time * (380 + s.speed * 30) + i * 173) % (W + 240)) + 120;
+        ctx.beginPath();
+        ctx.moveTo(lx, ly);
+        ctx.lineTo(lx + 40 + (i % 3) * 20, ly);
+        ctx.stroke();
+      }
+    }
+    ctx.restore();
+
+    /* HUD glassmorphism: quãng đường + pace, điểm + tốc độ, thanh combo. */
+    const panel = (x: number, y: number, w: number, h: number) => {
+      ctx.fillStyle = 'rgba(255, 255, 255, 0.72)';
+      roundRectPath(ctx, x, y, w, h, 10);
+      ctx.fill();
+      ctx.strokeStyle = 'rgba(15, 23, 42, 0.08)';
+      ctx.lineWidth = 1;
+      ctx.stroke();
+    };
+    panel(12, 12, 150, 64);
+    panel(W - 162, 12, 150, 64);
+    ctx.textAlign = 'left';
+    ctx.fillStyle = '#64748b';
+    ctx.font = '600 9px sans-serif';
+    ctx.fillText('QUÃNG ĐƯỜNG', 22, 26);
+    ctx.fillStyle = '#0f172a';
+    ctx.font = '800 17px sans-serif';
+    ctx.fillText(`${(s.dist / 1000).toFixed(2)} KM`, 22, 46);
+    const paceMin = 60 / Math.max(1, s.speed * 3.2);
+    const paceMm = Math.floor(paceMin);
+    const paceSs = Math.floor((paceMin - paceMm) * 60);
+    ctx.fillStyle = '#475569';
+    ctx.font = '600 10px sans-serif';
+    ctx.fillText(`Pace ${paceMm}:${String(paceSs).padStart(2, '0')} /km`, 22, 62);
+    ctx.fillStyle = '#64748b';
+    ctx.font = '600 9px sans-serif';
+    ctx.fillText('ĐIỂM', W - 152, 26);
+    ctx.fillStyle = '#0f172a';
+    ctx.font = '800 17px sans-serif';
+    ctx.fillText(String(Math.floor(s.displayScore)), W - 152, 46);
+    ctx.fillStyle = '#475569';
+    ctx.font = '600 10px sans-serif';
+    ctx.fillText(`Tốc độ ${(s.speed * 3.2).toFixed(1)} km/h`, W - 152, 62);
+    if (s.combo > 1) {
+      ctx.fillStyle = 'rgba(15, 23, 42, 0.18)';
+      roundRectPath(ctx, 12, 82, 150, 10, 5);
+      ctx.fill();
+      ctx.fillStyle = '#16a34a';
+      roundRectPath(ctx, 12, 82, 150 * ((s.combo - 1) / 2), 10, 5);
+      ctx.fill();
+      ctx.fillStyle = '#ffffff';
+      ctx.font = '800 8px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText(`COMBO ×${s.combo.toFixed(2)}`, 87, 90);
+    }
+
+    /* Banner mốc KM trượt từ trên xuống. */
+    if (s.banner) {
+      const t = s.banner.t;
+      const slide = Math.min(1, t * 4);
+      const by = -48 + slide * 64;
+      const alpha = t > 1.8 ? Math.max(0, (2.2 - t) / 0.4) : 1;
+      ctx.save();
+      ctx.globalAlpha = alpha;
+      const grad = ctx.createLinearGradient(W / 2 - 150, by, W / 2 + 150, by);
+      grad.addColorStop(0, '#f59e0b');
+      grad.addColorStop(1, '#f97316');
+      ctx.fillStyle = grad;
+      roundRectPath(ctx, W / 2 - 150, by, 300, 38, 10);
+      ctx.fill();
+      ctx.fillStyle = '#ffffff';
+      ctx.font = '800 15px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText(s.banner.text, W / 2, by + 24);
+      ctx.restore();
+    }
+  }, []);
+
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const resize = () => {
+      const dpr = Math.min(window.devicePixelRatio || 1, 2);
+      canvas.width = Math.floor(W * dpr);
+      canvas.height = Math.floor(H * dpr);
+    };
+    resize();
+    window.addEventListener('resize', resize);
+    let raf = 0;
+    const loop = (now: number) => {
+      const dt = lastTimeRef.current
+        ? Math.min((now - lastTimeRef.current) / 1000, 0.05)
+        : 0.016;
+      lastTimeRef.current = now;
+      if (phaseRef.current === 'playing') updateGame(dt);
+      if (phaseRef.current !== 'paused') clockRef.current += dt;
+      drawScene();
+      raf = requestAnimationFrame(loop);
+    };
+    raf = requestAnimationFrame(loop);
+    return () => {
+      cancelAnimationFrame(raf);
+      window.removeEventListener('resize', resize);
+    };
+  }, [updateGame, drawScene]);
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.code === 'Space' || e.code === 'ArrowUp' || e.key === 'w' || e.key === 'W') {
+        e.preventDefault();
+        if (phaseRef.current === 'ready') startGame();
+        else pressJump();
+      } else if (e.code === 'ArrowDown' || e.key === 's' || e.key === 'S') {
+        e.preventDefault();
+        pressSlide();
+      } else if (e.code === 'KeyP' || e.code === 'Escape') {
+        e.preventDefault();
+        togglePause();
+      } else if (e.code === 'Enter' && phaseRef.current === 'ready') {
+        startGame();
+      }
+    };
+    const onKeyUp = (e: KeyboardEvent) => {
+      if (e.code === 'ArrowDown' || e.key === 's' || e.key === 'S') {
+        stateRef.current.fastFall = false;
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    window.addEventListener('keyup', onKeyUp);
+    return () => {
+      window.removeEventListener('keydown', onKey);
+      window.removeEventListener('keyup', onKeyUp);
+    };
+  }, [pressJump, pressSlide, togglePause, startGame]);
+
+  const [saveError, setSaveError] = useState('');
+  const fmtTime = (sec: number) => {
+    const m = Math.floor(sec / 60);
+    const ss = Math.floor(sec % 60);
+    return `${m}:${String(ss).padStart(2, '0')}`;
+  };
+
+  const handleSave = async () => {
+    if (!finalStats || saved || saving) return;
+    const playerName = name.trim();
+    if (!playerName) {
+      setSaveError('Nhập tên trước khi lưu điểm.');
       return;
     }
     setSaving(true);
-    setSaveError(null);
+    setSaveError('');
+    if (typeof window !== 'undefined') {
+      window.localStorage.setItem(NAME_KEY, playerName);
+      window.localStorage.setItem(TEAM_KEY, team.trim());
+    }
     const { error } = await supabase.from('game_scores').insert({
-      player_name: name.slice(0, 30),
-      team_name: teamInput.trim() ? teamInput.trim().slice(0, 30) : null,
-      score: finalScore,
+      player_name: playerName.slice(0, 30),
+      team_name: team.trim() ? team.trim().slice(0, 30) : null,
+      score: finalStats.score,
     });
     setSaving(false);
     if (error) {
-      setSaveError('Không lưu được điểm, vui lòng thử lại sau.');
+      setSaveError('Lưu thất bại, thử lại sau.');
       return;
     }
-    localStorage.setItem(NAME_KEY, name);
-    localStorage.setItem(TEAM_KEY, teamInput.trim());
     setSaved(true);
     void loadScores();
   };
 
   return (
     <div className="relative">
-      {/* Khung Canvas Trò Chơi */}
       <div className="relative overflow-hidden rounded-2xl bg-slate-900 shadow-2xl ring-2 ring-slate-800">
         <canvas
           ref={canvasRef}
           width={W}
           height={H}
           onPointerDown={() => {
-            if (phase === 'ready' || phase === 'playing') jump();
-            else if (phase === 'paused') togglePause();
+            if (phaseRef.current === 'playing') pressJump();
           }}
           className="block h-auto w-full cursor-pointer touch-none select-none"
         />
-
-        {/* Nút Bật/Tắt Âm Thanh góc trên */}
         <div className="absolute top-3 left-3 flex items-center gap-2">
           <button
-            onClick={toggleSound}
-            title={soundOn ? 'Tắt âm thanh' : 'Bật âm thanh'}
-            className="flex h-9 w-9 items-center justify-center rounded-xl bg-slate-900/70 text-white backdrop-blur-md transition-all hover:bg-slate-850 hover:scale-105 active:scale-95"
+            onClick={() => setSoundOn((v) => !v)}
+            aria-label="Bật/tắt âm thanh"
+            className="flex h-9 w-9 items-center justify-center rounded-full bg-white/85 text-slate-800 shadow transition-colors hover:bg-white"
           >
-            {soundOn ? <Volume2 className="h-5 w-5 text-emerald-400" /> : <VolumeX className="h-5 w-5 text-slate-400" />}
+            {soundOn ? <Volume2 className="h-4 w-4" /> : <VolumeX className="h-4 w-4" />}
           </button>
+          {(phase === 'playing' || phase === 'paused') && (
+            <button
+              onClick={togglePause}
+              aria-label="Tạm dừng/tiếp tục"
+              className="flex h-9 w-9 items-center justify-center rounded-full bg-white/85 text-slate-800 shadow transition-colors hover:bg-white"
+            >
+              {phase === 'paused' ? <Play className="h-4 w-4" /> : <Pause className="h-4 w-4" />}
+            </button>
+          )}
+        </div>
+        <div className="absolute bottom-3 right-3 flex items-center gap-3 sm:hidden">
+          <button
+            onPointerDown={(e) => {
+              e.preventDefault();
+              pressSlide();
+            }}
+            onPointerUp={() => {
+              stateRef.current.fastFall = false;
+            }}
+            aria-label="Trượt"
+            className="flex h-12 w-14 items-center justify-center rounded-xl bg-white/85 text-slate-900 shadow"
+          >
+            <ArrowDown className="h-6 w-6" />
+          </button>
+          <button
+            onPointerDown={(e) => {
+              e.preventDefault();
+              pressJump();
+            }}
+            aria-label="Nhảy"
+            className="flex h-12 w-14 items-center justify-center rounded-xl bg-white/85 text-slate-900 shadow"
+          >
+            <ArrowUp className="h-6 w-6" />
+          </button>
+        </div>
+      </div>
 
-          {/* Nút Tạm Dừng / Tiếp tục */}
+      <div className="mt-4 flex flex-wrap items-center justify-between gap-4">
+        <div className="flex items-center gap-3">
+          {phase === 'ready' && (
+            <button
+              onClick={startGame}
+              className="flex items-center gap-2 rounded-xl bg-geoenv-600 px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-geoenv-700"
+            >
+              <Play className="h-4 w-4" />
+              Bắt đầu chạy
+            </button>
+          )}
           {phase === 'playing' && (
             <button
               onClick={togglePause}
-              title="Tạm dừng (Phím P)"
-              className="flex h-9 w-9 items-center justify-center rounded-xl bg-slate-900/70 text-white backdrop-blur-md transition-all hover:bg-slate-850 hover:scale-105 active:scale-95"
+              className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-5 py-2.5 text-sm font-semibold text-slate-700 transition-colors hover:border-geoenv-300 hover:text-geoenv-700"
             >
-              <Pause className="h-4 w-4 text-amber-400" />
+              <Pause className="h-4 w-4" />
+              Tạm dừng
             </button>
           )}
           {phase === 'paused' && (
             <button
               onClick={togglePause}
-              title="Tiếp tục chạy"
-              className="flex h-9 w-9 items-center justify-center rounded-xl bg-slate-900/70 text-white backdrop-blur-md transition-all hover:bg-slate-850 hover:scale-105 active:scale-95 animate-pulse"
+              className="flex items-center gap-2 rounded-xl bg-geoenv-600 px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-geoenv-700"
             >
-              <Play className="h-4 w-4 text-emerald-400 fill-emerald-400" />
+              <Play className="h-4 w-4" />
+              Tiếp tục
             </button>
           )}
-        </div>
-
-        {/* Nút cảm ứng trên điện thoại / màn hình chạm */}
-        {phase === 'playing' && (
-          <div className="absolute bottom-3 right-3 flex items-center gap-3 sm:hidden">
+          {(phase === 'over' || phase === 'paused') && (
             <button
-              onClick={(e) => {
-                e.stopPropagation();
-                slide();
-              }}
-              className="flex h-12 w-14 items-center justify-center rounded-xl bg-slate-900/80 font-bold text-white shadow-lg backdrop-blur-md border border-white/20 active:bg-orange-600"
+              onClick={startGame}
+              className="flex items-center gap-2 rounded-xl bg-geoenv-600 px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-geoenv-700"
             >
-              <ArrowDown className="h-6 w-6" />
-            </button>
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                jump();
-              }}
-              className="flex h-12 w-14 items-center justify-center rounded-xl bg-geoenv-600 font-bold text-white shadow-lg backdrop-blur-md border border-white/20 active:bg-geoenv-700"
-            >
-              <ArrowUp className="h-6 w-6" />
-            </button>
-          </div>
-        )}
-      </div>
-
-      {/* Bảng điều khiển nút bấm dưới Game */}
-      <div className="mt-4 flex flex-wrap items-center justify-between gap-4">
-        <div className="flex items-center gap-3">
-          <button
-            onClick={startGame}
-            className="flex items-center gap-2 rounded-xl bg-geoenv-600 px-5 py-3 text-sm font-bold text-white shadow-md shadow-geoenv-600/30 transition-all hover:bg-geoenv-700 hover:scale-102 active:scale-98"
-          >
-            {phase === 'ready' ? <Play className="h-4 w-4 fill-white" /> : <RotateCcw className="h-4 w-4" />}
-            {phase === 'ready' ? 'Bắt đầu chạy' : 'Chạy lại'}
-          </button>
-
-          {(phase === 'playing' || phase === 'paused') && (
-            <button
-              onClick={togglePause}
-              className="inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
-            >
-              {phase === 'paused' ? <Play className="h-4 w-4 text-emerald-600 fill-emerald-600" /> : <Pause className="h-4 w-4 text-amber-600" />}
-              {phase === 'paused' ? 'Tiếp tục' : 'Tạm dừng'}
+              <RotateCcw className="h-4 w-4" />
+              Chạy lại
             </button>
           )}
-
-          <button
-            onClick={jump}
-            disabled={phase !== 'playing'}
-            className="hidden sm:inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-40"
-          >
-            <ArrowUp className="h-4 w-4 text-geoenv-600" /> Nhảy (Nhấn 2 lần: Nhảy kép)
-          </button>
-
-          <button
-            onClick={slide}
-            disabled={phase !== 'playing'}
-            className="hidden sm:inline-flex items-center gap-1.5 rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm font-semibold text-slate-700 transition hover:bg-slate-50 disabled:opacity-40"
-          >
-            <ArrowDown className="h-4 w-4 text-orange-600" /> Cúi trượt
-          </button>
+          <span className="hidden text-sm text-slate-500 sm:inline">
+            Cách nhảy • ↓ trượt / rơi nhanh • P tạm dừng
+          </span>
         </div>
-
-        {best > 0 && (
-          <div className="flex items-center gap-2 rounded-xl bg-amber-50 px-4 py-2 border border-amber-200 text-sm font-bold text-amber-800">
-            <Trophy className="h-4 w-4 text-amber-600" /> Kỷ lục cá nhân: <span className="tabular-nums text-base">{best} m</span>
-          </div>
-        )}
-      </div>
-
-      {/* Thẻ hướng dẫn vật phẩm */}
-      <div className="mt-3 grid grid-cols-2 gap-2 text-xs text-slate-600 sm:grid-cols-4">
-        <div className="flex items-center gap-1.5 rounded-lg bg-slate-50 p-2 border border-slate-200">
-          <span className="text-base">💧</span>
-          <span><b>Chai nước:</b> +50 điểm & tăng combo</span>
-        </div>
-        <div className="flex items-center gap-1.5 rounded-lg bg-slate-50 p-2 border border-slate-200">
-          <span className="text-base">🏅</span>
-          <span><b>Huy chương:</b> +150 điểm thưởng</span>
-        </div>
-        <div className="flex items-center gap-1.5 rounded-lg bg-slate-50 p-2 border border-slate-200">
-          <Shield className="h-4 w-4 text-sky-600" />
-          <span><b>Khiên ngọc:</b> Đỡ 1 lần va chạm</span>
-        </div>
-        <div className="flex items-center gap-1.5 rounded-lg bg-slate-50 p-2 border border-slate-200">
-          <Zap className="h-4 w-4 text-amber-500 fill-amber-500" />
-          <span><b>Booster:</b> Tốc độ cao + Hút điểm</span>
+        <div className="flex items-center gap-2">
+          <span className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-xs font-semibold text-slate-600">
+            <Trophy className="h-3.5 w-3.5 text-amber-500" />
+            Kỷ lục: {best.toLocaleString('vi-VN')}
+          </span>
+          <span className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-xs font-semibold text-slate-600">
+            <Shield className="h-3.5 w-3.5 text-blue-500" />
+            Khiên chặn 1 lần
+          </span>
+          <span className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-xs font-semibold text-slate-600">
+            <Zap className="h-3.5 w-3.5 text-amber-500" />
+            Tăng tốc 4 giây
+          </span>
         </div>
       </div>
 
-      {/* Màn hình kết thúc trò chơi (Game Over) */}
-      {phase === 'over' && (
-        <div className="card mt-6 p-6 text-center border-2 border-geoenv-500/20 shadow-xl sm:p-8 animate-in fade-in zoom-in-95 duration-200">
-          <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-red-100 text-red-600 mb-2">
-            💥
-          </div>
-          <p className="text-xl font-bold text-slate-900">Vấp ngã rồi!</p>
-          <p className="mt-1 text-6xl font-black tabular-nums text-geoenv-700">{finalScore} <span className="text-2xl font-bold text-slate-400">m</span></p>
+      {phase === 'ready' && (
+        <p className="mt-3 text-center text-sm leading-relaxed text-slate-500">
+          Nhảy qua chướng ngại thấp, trượt qua drone, cành cây và biển báo trên cao. Nhấn 2 lần
+          để lộn vòng nhảy kép.
+        </p>
+      )}
 
-          {isNewBest && (
-            <p className="mt-3 inline-flex items-center gap-2 rounded-full bg-amber-100 px-4 py-1.5 text-sm font-bold text-amber-800 shadow-sm animate-bounce">
-              <Sparkles className="h-4 w-4 text-amber-600" /> Kỷ lục mới của bạn!
+      {phase === 'over' && finalStats && (
+        <div className="card mt-4 p-5 sm:p-6">
+          <div className="text-center">
+            <span className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-gradient-to-br from-amber-300 to-amber-600 shadow-lg">
+              <Medal className="h-8 w-8 text-white" />
+            </span>
+            <h2 className="mt-3 text-xl font-black tracking-wide text-slate-900 sm:text-2xl">
+              FINISHER — GEOENV RUN
+            </h2>
+            <p className="mt-1 text-sm text-slate-600">
+              Hạng {finalStats.rank} • {finalStats.title}
+            </p>
+          </div>
+
+          <div className="mt-5 grid grid-cols-2 gap-2.5 sm:grid-cols-4">
+            <div className="rounded-xl bg-slate-50 p-3 text-center">
+              <p className="text-xs font-semibold text-slate-500">Điểm</p>
+              <p className="mt-1 text-lg font-black tabular-nums text-slate-900">
+                {finalStats.score.toLocaleString('vi-VN')}
+              </p>
+            </div>
+            <div className="rounded-xl bg-slate-50 p-3 text-center">
+              <p className="text-xs font-semibold text-slate-500">Quãng đường</p>
+              <p className="mt-1 text-lg font-black tabular-nums text-slate-900">
+                {finalStats.km.toFixed(2)} KM
+              </p>
+            </div>
+            <div className="rounded-xl bg-slate-50 p-3 text-center">
+              <p className="text-xs font-semibold text-slate-500">Thời gian</p>
+              <p className="mt-1 text-lg font-black tabular-nums text-slate-900">
+                {fmtTime(finalStats.time)}
+              </p>
+            </div>
+            <div className="rounded-xl bg-slate-50 p-3 text-center">
+              <p className="text-xs font-semibold text-slate-500">Tốc độ tối đa</p>
+              <p className="mt-1 text-lg font-black tabular-nums text-slate-900">
+                {finalStats.maxSpeedKmh.toFixed(1)} km/h
+              </p>
+            </div>
+            <div className="rounded-xl bg-slate-50 p-3 text-center">
+              <p className="text-xs font-semibold text-slate-500">Combo tối đa</p>
+              <p className="mt-1 text-lg font-black tabular-nums text-slate-900">
+                ×{finalStats.maxCombo.toFixed(2)}
+              </p>
+            </div>
+            <div className="rounded-xl bg-slate-50 p-3 text-center">
+              <p className="text-xs font-semibold text-slate-500">Vật phẩm</p>
+              <p className="mt-1 text-lg font-black tabular-nums text-slate-900">
+                {finalStats.items}
+              </p>
+            </div>
+          </div>
+
+          {!saved ? (
+            <div className="mt-5">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <input
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder="Tên của bạn *"
+                  maxLength={30}
+                  className="input-field"
+                />
+                <input
+                  value={team}
+                  onChange={(e) => setTeam(e.target.value)}
+                  placeholder="Đội (không bắt buộc)"
+                  maxLength={30}
+                  className="input-field"
+                />
+              </div>
+              {saveError && <p className="mt-2 text-sm text-red-600">{saveError}</p>}
+              <button
+                onClick={handleSave}
+                disabled={saving}
+                className="mt-3 w-full rounded-xl bg-geoenv-600 px-5 py-3 text-sm font-semibold text-white transition-colors hover:bg-geoenv-700 disabled:opacity-50"
+              >
+                {saving ? 'Đang lưu…' : 'Lưu điểm lên bảng xếp hạng'}
+              </button>
+            </div>
+          ) : (
+            <p className="mt-5 text-center text-sm font-semibold text-emerald-700">
+              Đã lưu điểm lên bảng xếp hạng!
             </p>
           )}
 
-          {/* Thống kê chi tiết trận đấu & Danh hiệu phong độ */}
-          {roundStats && (
-            <div className="mt-5 flex flex-col items-center">
-              <span className={`inline-flex items-center gap-1.5 px-4 py-1.5 rounded-full text-xs font-black uppercase tracking-wider ${
-                roundStats.rank === 'S'
-                  ? 'bg-amber-100 text-amber-900 border border-amber-300 shadow-sm'
-                  : roundStats.rank === 'A'
-                  ? 'bg-emerald-100 text-emerald-900 border border-emerald-300'
-                  : roundStats.rank === 'B'
-                  ? 'bg-sky-100 text-sky-900 border border-sky-300'
-                  : 'bg-slate-100 text-slate-800 border border-slate-200'
-              }`}>
-                <Award className="h-4 w-4" /> {roundStats.rankTitle}
-              </span>
-
-              {/* Grid 4 thẻ thống kê */}
-              <div className="mt-4 grid grid-cols-2 sm:grid-cols-4 gap-2.5 w-full max-w-lg">
-                <div className="rounded-xl bg-slate-50 p-3 border border-slate-200/80 text-center">
-                  <span className="text-xs text-slate-500 font-medium">💧 Chai nước</span>
-                  <p className="mt-0.5 text-lg font-black text-sky-600 tabular-nums">{roundStats.bottles}</p>
-                </div>
-                <div className="rounded-xl bg-slate-50 p-3 border border-slate-200/80 text-center">
-                  <span className="text-xs text-slate-500 font-medium">🏅 Huy chương</span>
-                  <p className="mt-0.5 text-lg font-black text-amber-600 tabular-nums">{roundStats.medals}</p>
-                </div>
-                <div className="rounded-xl bg-slate-50 p-3 border border-slate-200/80 text-center">
-                  <span className="text-xs text-slate-500 font-medium">⚡ Tốc độ max</span>
-                  <p className="mt-0.5 text-lg font-black text-orange-600 tabular-nums">{roundStats.maxSpeedKmh} <span className="text-xs font-semibold">km/h</span></p>
-                </div>
-                <div className="rounded-xl bg-slate-50 p-3 border border-slate-200/80 text-center">
-                  <span className="text-xs text-slate-500 font-medium flex items-center justify-center gap-0.5">
-                    <Flame className="h-3 w-3 text-rose-500" /> Max Combo
-                  </span>
-                  <p className="mt-0.5 text-lg font-black text-rose-600 tabular-nums">x{roundStats.maxCombo}</p>
-                </div>
-              </div>
-
-              {/* Nút Sao chép thành tích chia sẻ */}
-              <button
-                onClick={() => {
-                  const shareText = `🏃 Tôi vừa đạt ${finalScore}m tại Mini Game GEOENV RUN 2026! Đạt danh hiệu ${roundStats.rankTitle}!`;
-                  void navigator.clipboard.writeText(shareText);
-                  setCopied(true);
-                  setTimeout(() => setCopied(false), 2500);
-                }}
-                className="mt-3.5 inline-flex items-center gap-1.5 text-xs font-semibold text-geoenv-700 hover:text-geoenv-800 bg-geoenv-50 hover:bg-geoenv-100 border border-geoenv-200 px-3.5 py-1.5 rounded-lg transition"
-              >
-                {copied ? <Check className="h-3.5 w-3.5 text-emerald-600" /> : <Copy className="h-3.5 w-3.5" />}
-                {copied ? 'Đã sao chép thành tích!' : 'Sao chép thành tích để chia sẻ'}
-              </button>
-            </div>
-          )}
-
-          {finalScore > 0 && !saved && (
-            <div className="mx-auto mt-6 max-w-md rounded-2xl bg-slate-50 p-5 text-left border border-slate-200">
-              <h4 className="text-sm font-bold text-slate-900">Ghi danh vào Bảng Vàng GEOENV RUN</h4>
-              <div className="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2">
-                <label className="block">
-                  <span className="text-xs font-semibold text-slate-700">Tên của bạn *</span>
-                  <input
-                    value={nameInput}
-                    onChange={(e) => setNameInput(e.target.value)}
-                    maxLength={30}
-                    placeholder="VD: Nguyễn Văn A"
-                    className="input-field mt-1"
-                  />
-                </label>
-                <label className="block">
-                  <span className="text-xs font-semibold text-slate-700">Đội (không bắt buộc)</span>
-                  <input
-                    value={teamInput}
-                    onChange={(e) => setTeamInput(e.target.value)}
-                    maxLength={30}
-                    placeholder="VD: SIÊU LỐP"
-                    className="input-field mt-1"
-                  />
-                </label>
-              </div>
-
-              <button
-                onClick={() => void saveScore()}
-                disabled={saving}
-                className="mt-4 flex w-full items-center justify-center gap-2 rounded-xl bg-geoenv-600 px-5 py-3 text-sm font-bold text-white shadow-md transition-all hover:bg-geoenv-700 disabled:opacity-60"
-              >
-                {saving ? 'Đang lưu điểm...' : 'Lưu điểm vào bảng xếp hạng'}
-              </button>
-              {saveError && <p className="mt-2 text-center text-sm font-semibold text-red-600">{saveError}</p>}
-            </div>
-          )}
-
-          {saved && (
-            <div className="mx-auto mt-5 inline-flex items-center gap-2 rounded-xl bg-emerald-50 px-5 py-3 text-sm font-bold text-emerald-700 border border-emerald-200">
-              ✓ Đã lưu thành công vào Bảng Xếp Hạng!
-            </div>
-          )}
-
           <div className="mt-6">
-            <button
-              onClick={startGame}
-              className="inline-flex items-center gap-2 rounded-xl bg-slate-900 px-6 py-3 text-sm font-bold text-white hover:bg-slate-800 transition shadow-lg"
-            >
-              <RotateCcw className="h-4 w-4" /> Thử sức lại ván mới
-            </button>
+            <h3 className="flex items-center gap-2 text-sm font-bold text-slate-900">
+              <Trophy className="h-4 w-4 text-amber-500" />
+              Bảng xếp hạng
+            </h3>
+            {scoresError ? (
+              <p className="mt-2 text-sm text-slate-500">Không tải được bảng xếp hạng.</p>
+            ) : scores.length === 0 ? (
+              <p className="mt-2 text-sm text-slate-500">Chưa có điểm nào.</p>
+            ) : (
+              <ol className="mt-2 space-y-1.5">
+                {scores.map((row, i) => (
+                  <li
+                    key={row.id}
+                    className="flex items-center gap-3 rounded-lg bg-slate-50 px-3 py-2 text-sm"
+                  >
+                    <span className="w-5 text-center font-black tabular-nums text-slate-400">
+                      {i + 1}
+                    </span>
+                    <span className="flex-1 font-semibold text-slate-800">
+                      {row.player_name}
+                      {row.team_name && (
+                        <span className="ml-2 font-normal text-slate-500">{row.team_name}</span>
+                      )}
+                    </span>
+                    <span className="font-black tabular-nums text-geoenv-700">
+                      {row.score.toLocaleString('vi-VN')}
+                    </span>
+                  </li>
+                ))}
+              </ol>
+            )}
           </div>
         </div>
       )}
-
-      {/* Bảng Xếp Hạng Top 10 */}
-      <div className="card mt-6 p-6 sm:p-7">
-        <h3 className="flex items-center justify-between text-lg font-bold text-slate-900">
-          <span className="flex items-center gap-2">
-            <Trophy className="h-5 w-5 text-amber-500" />
-            Bảng Vàng Vận Động Viên Xuất Sắc
-          </span>
-          <button
-            onClick={() => void loadScores()}
-            className="text-xs font-semibold text-geoenv-600 hover:underline"
-          >
-            Làm mới
-          </button>
-        </h3>
-
-        {scoresError ? (
-          <p className="mt-3 text-sm text-slate-500">
-            Bảng xếp hạng sẽ sẵn sàng sau khi kích hoạt cơ sở dữ liệu điểm.
-          </p>
-        ) : scores === null ? (
-          <p className="mt-3 text-sm text-slate-500">Đang tải bảng xếp hạng…</p>
-        ) : scores.length === 0 ? (
-          <p className="mt-3 text-sm text-slate-500">Chưa có thành tích nào — hãy là người đầu tiên ghi danh!</p>
-        ) : (
-          <ol className="mt-4 space-y-2">
-            {scores.map((row, i) => (
-              <li
-                key={row.id}
-                className={`flex items-center gap-3 rounded-xl px-4 py-3 text-sm transition ${
-                  i === 0
-                    ? 'bg-amber-50/80 border border-amber-200'
-                    : i === 1
-                    ? 'bg-slate-100/80 border border-slate-200'
-                    : i === 2
-                    ? 'bg-orange-50/60 border border-orange-200'
-                    : 'bg-slate-50'
-                }`}
-              >
-                <span
-                  className={`w-7 text-center text-base font-black tabular-nums ${
-                    i === 0 ? 'text-amber-600' : i === 1 ? 'text-slate-500' : i === 2 ? 'text-amber-700' : 'text-slate-400'
-                  }`}
-                >
-                  {i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : i + 1}
-                </span>
-                <span className="min-w-0 flex-1">
-                  <span className="font-bold text-slate-900">{row.player_name}</span>
-                  {row.team_name && <span className="text-slate-500 font-medium"> · Đội {row.team_name}</span>}
-                  <span className="block text-xs text-slate-400">
-                    {new Date(row.created_at).toLocaleDateString('vi-VN', {
-                      day: '2-digit',
-                      month: '2-digit',
-                      hour: '2-digit',
-                      minute: '2-digit',
-                    })}
-                  </span>
-                </span>
-                <span className="text-base font-black tabular-nums text-geoenv-700">{row.score} m</span>
-              </li>
-            ))}
-          </ol>
-        )}
-      </div>
     </div>
   );
 }
