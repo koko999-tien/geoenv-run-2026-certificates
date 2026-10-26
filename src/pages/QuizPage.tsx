@@ -190,7 +190,7 @@ export function QuizPage() {
         <span className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-violet-100">
           <Gamepad2 className="h-7 w-7 text-violet-600" />
         </span>
-        <h1 className="mt-4 text-2xl font-bold text-slate-900 sm:text-3xl">Đố vui</h1>
+        <h1 className="mt-4 text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">Đố vui</h1>
       </div>
 
       {finished ? (
@@ -199,7 +199,7 @@ export function QuizPage() {
           <span className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-amber-100">
             <Trophy className="h-7 w-7 text-amber-600" />
           </span>
-          <h2 className="mt-4 text-2xl font-bold text-slate-900 sm:text-3xl">Kết quả của bạn</h2>
+          <h2 className="mt-4 text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">Kết quả của bạn</h2>
           <p className="mt-3 text-5xl font-black tabular-nums text-geoenv-700">
             {score}/{QUESTIONS.length}
           </p>

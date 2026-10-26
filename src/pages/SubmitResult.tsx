@@ -116,7 +116,7 @@ export function SubmitResult() {
           <Trophy className="h-3.5 w-3.5" />
           Nộp kết quả chạy
         </span>
-        <h1 className="mt-3 text-2xl font-bold text-slate-900 sm:text-3xl">Nộp kết quả chạy</h1>
+        <h1 className="mt-3 text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">Nộp kết quả chạy</h1>
         <p className="mx-auto mt-2 max-w-md text-sm leading-relaxed text-slate-600">
           Bạn vừa về đích? Gửi ảnh chụp màn hình kết quả (Strava hoặc đồng hồ chạy)
           kèm thông tin bên dưới để Ban tổ chức ghi nhận thành tích của bạn.

@@ -630,7 +630,7 @@ export function CertificateLookup() {
           <span className="inline-flex items-center gap-2 rounded-full bg-geoenv-50 px-4 py-1.5 text-xs font-semibold tracking-wide text-geoenv-700 ring-1 ring-geoenv-100 sm:text-sm">
             🏅 Giấy chứng nhận
           </span>
-          <h1 className="mt-4 text-3xl font-bold text-slate-900 sm:text-4xl">
+          <h1 className="mt-4 text-3xl font-bold tracking-tight text-slate-900 sm:text-4xl">
             Tra cứu giấy chứng nhận
           </h1>
         </div>
@@ -659,7 +659,7 @@ export function CertificateLookup() {
         <span className="inline-flex items-center gap-2 rounded-full bg-geoenv-50 px-4 py-1.5 text-xs font-semibold tracking-wide text-geoenv-700 ring-1 ring-geoenv-100 sm:text-sm">
           🏅 Giấy chứng nhận
         </span>
-        <h1 className="mt-4 text-3xl font-bold text-slate-900 sm:text-4xl">
+        <h1 className="mt-4 text-3xl font-bold tracking-tight text-slate-900 sm:text-4xl">
           Tra cứu giấy chứng nhận
         </h1>
 

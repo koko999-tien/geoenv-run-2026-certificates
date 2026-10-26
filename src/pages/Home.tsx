@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { useRevealOnScroll } from '../hooks/useRevealOnScroll';
 import { Link } from 'react-router-dom';
 import {
   ArrowRight,
@@ -135,23 +136,7 @@ export function Home() {
 
   /* Hiệu ứng cuộn hiện dần: các mục có class reveal-on-scroll sẽ mờ dần thành rõ
      khi cuộn tới. Mỗi mục chỉ hiện 1 lần. */
-  useEffect(() => {
-    const sections = Array.from(document.querySelectorAll('.reveal-on-scroll'));
-    if (sections.length === 0) return;
-    const obs = new IntersectionObserver(
-      (entries) => {
-        entries.forEach((entry) => {
-          if (entry.isIntersecting) {
-            entry.target.classList.add('is-visible');
-            obs.unobserve(entry.target);
-          }
-        });
-      },
-      { threshold: 0.12 },
-    );
-    sections.forEach((s) => obs.observe(s));
-    return () => obs.disconnect();
-  }, []);
+  useRevealOnScroll();
   const pad = (n: number) => String(n).padStart(2, '0');
 
   const countdownCells = [

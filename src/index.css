@@ -93,8 +93,9 @@
   /* Thẻ trắng bo góc — dùng khắp site */
   .card {
     @apply rounded-2xl border border-slate-200 bg-white shadow-sm;
-    /* Mượt khi rê chuột vào thẻ có hiệu ứng nâng (hover:-translate-y-0.5) */
-    transition: box-shadow 0.25s ease, transform 0.25s ease, border-color 0.25s ease;
+    /* Mượt khi rê chuột vào thẻ có hiệu ứng nâng (hover:-translate-y-0.5) —
+       easing expo-out kiểu mẫu cao cấp (web-patterns), thay cho ease thường. */
+    transition: box-shadow 0.25s cubic-bezier(0.16, 1, 0.3, 1), transform 0.25s cubic-bezier(0.16, 1, 0.3, 1), border-color 0.25s cubic-bezier(0.16, 1, 0.3, 1);
   }
 
   /* Phản hồi khi nhấn nút: hơi lún xuống, chỉ là hiệu ứng, không đổi bố cục.
@@ -139,7 +140,7 @@
 .reveal-on-scroll {
   opacity: 0;
   transform: translateY(24px);
-  transition: opacity 0.7s ease, transform 0.7s ease;
+  transition: opacity 0.7s cubic-bezier(0.16, 1, 0.3, 1), transform 0.7s cubic-bezier(0.16, 1, 0.3, 1);
 }
 .reveal-on-scroll.is-visible {
   opacity: 1;

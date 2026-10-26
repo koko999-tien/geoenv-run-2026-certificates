@@ -1,6 +1,7 @@
 import { Link } from 'react-router-dom';
 import { Gamepad2, Footprints, Lock, ArrowRight } from 'lucide-react';
 import { useGameLock } from '../lib/siteLock';
+import { useRevealOnScroll } from '../hooks/useRevealOnScroll';
 
 /* Trang Minigame giờ chỉ là TRANG CHỦ của 2 trò chơi — 2 thẻ, mỗi thẻ nhảy
    sang 1 trang riêng. Không tải sẵn code quiz lẫn code game như kiểu tab cũ,
@@ -9,6 +10,7 @@ import { useGameLock } from '../lib/siteLock';
 export function ChillGame() {
   const { checked, locked, isAdmin } = useGameLock();
   const showGameBadge = checked && locked;
+  useRevealOnScroll();
 
   return (
     <div className="mx-auto max-w-2xl px-4 py-10 sm:px-6">
@@ -16,13 +18,13 @@ export function ChillGame() {
         <span className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-violet-100">
           <Gamepad2 className="h-7 w-7 text-violet-600" />
         </span>
-        <h1 className="mt-4 text-2xl font-bold text-slate-900 sm:text-3xl">Minigame</h1>
+        <h1 className="mt-4 text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">Minigame</h1>
       </div>
 
       <div className="mt-8 grid grid-cols-1 gap-4 sm:grid-cols-2">
         <Link
           to="/minigame/do-vui"
-          className="card group block p-6 transition-all hover:ring-2 hover:ring-geoenv-200"
+          className="card reveal-on-scroll group block p-6 transition-all hover:-translate-y-0.5 hover:shadow-lg hover:ring-2 hover:ring-geoenv-200"
         >
           <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-violet-100">
             <Gamepad2 className="h-6 w-6 text-violet-600" />
@@ -39,7 +41,7 @@ export function ChillGame() {
 
         <Link
           to="/minigame/chay-vo-tan"
-          className="card group block p-6 transition-all hover:ring-2 hover:ring-geoenv-200"
+          className="card reveal-on-scroll group block p-6 transition-all hover:-translate-y-0.5 hover:shadow-lg hover:ring-2 hover:ring-geoenv-200"
         >
           <span className="flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-100">
             <Footprints className="h-6 w-6 text-emerald-600" />

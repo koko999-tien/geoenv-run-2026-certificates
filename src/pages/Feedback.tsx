@@ -12,7 +12,7 @@ export function Feedback() {
           <Inbox className="h-3.5 w-3.5" />
           Hòm thư Ban tổ chức
         </span>
-        <h1 className="mt-3 text-2xl font-bold text-slate-900 sm:text-3xl">Góp ý &amp; phản ánh</h1>
+        <h1 className="mt-3 text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">Góp ý &amp; phản ánh</h1>
         <p className="mx-auto mt-2 max-w-md text-sm leading-relaxed text-slate-600">
           Trong lúc tham gia giải chạy, bạn có góp ý cho Ban tổ chức hoặc phát hiện điều chưa
           đúng (ví dụ chạy sai đường, gian lận, sự cố trên đường chạy) thì gửi vào đây nhé.
