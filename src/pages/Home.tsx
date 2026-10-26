@@ -8,7 +8,6 @@ import {
   Camera,
   Clock3,
   Flag,
-  Gamepad2,
   Heart,
   Mail,
   MapPin,
@@ -259,7 +258,7 @@ export function Home() {
       {/* ================= CHỨC NĂNG CHÍNH — ngay dưới banner, chạm 1 cái là tới ================= */}
       <section className="reveal-on-scroll py-10 sm:py-12">
         <div className="mx-auto max-w-5xl px-4 sm:px-6 lg:max-w-7xl lg:px-8">
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             {/* Ô 1: Tra cứu giấy chứng nhận — chức năng quan trọng nhất, luôn ở đầu trang */}
             <Link to="/tra-cuu" className="group block">
               <div className="card flex h-full items-center gap-4 p-5 transition-all duration-200 hover:-translate-y-0.5 hover:border-geoenv-200 hover:shadow-lg sm:p-6">
@@ -293,22 +292,6 @@ export function Home() {
                   </p>
                 </div>
                 <ArrowRight className="ml-auto h-5 w-5 shrink-0 text-amber-500 transition-transform group-hover:translate-x-1" />
-              </div>
-            </Link>
-
-            {/* Ô 3: Minigame */}
-            <Link to="/minigame" className="group block sm:col-span-2 lg:col-span-1">
-              <div className="card flex h-full items-center gap-4 p-5 transition-all duration-200 hover:-translate-y-0.5 hover:border-violet-200 hover:shadow-lg sm:p-6">
-                <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-violet-500 shadow-md shadow-violet-500/25">
-                  <Gamepad2 className="h-6 w-6 text-white" />
-                </span>
-                <div className="min-w-0">
-                  <h2 className="text-base font-bold text-slate-900 sm:text-lg">Minigame</h2>
-                  <p className="mt-0.5 text-sm leading-snug text-slate-600">
-                    Chơi mini game đố vui về GEOENV RUN, xem bạn được mấy điểm.
-                  </p>
-                </div>
-                <ArrowRight className="ml-auto h-5 w-5 shrink-0 text-violet-500 transition-transform group-hover:translate-x-1" />
               </div>
             </Link>
           </div>

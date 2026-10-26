@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react';
-import { Users, ShieldCheck, Loader2, ListChecks, Lock, Mail, Eye, Trophy, Gamepad2 } from 'lucide-react';
+import { Users, ShieldCheck, Loader2, ListChecks, Lock, Mail, Eye, Trophy } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
-import { isPublicLocked, isGameLocked } from '../lib/siteLock';
+import { isPublicLocked } from '../lib/siteLock';
 
 interface Stats {
   totalCertificates: number;
@@ -27,9 +27,6 @@ const PAGE_NAMES: Record<string, string> = {
   '/': 'Trang chủ',
   '/tra-cuu': 'Tra cứu giấy chứng nhận',
   '/gop-y': 'Góp ý & phản ánh',
-  '/minigame': 'Minigame',
-  '/minigame/do-vui': 'Đố vui',
-  '/minigame/chay-vo-tan': 'Chạy vô tận',
   '/nop-ket-qua': 'Nộp kết quả chạy',
   '/kiem-tra': 'Kiểm tra (dữ liệu thử)',
 };
@@ -54,17 +51,12 @@ export function AdminDashboard() {
   const [confirmToggle, setConfirmToggle] = useState(false);
   const [lockNotice, setLockNotice] = useState<string | null>(null);
   const [toggling, setToggling] = useState(false);
-  /* Trạng thái khóa trò chơi: null = chưa đọc được; mặc định khóa (fail closed) */
-  const [gameLocked, setGameLocked] = useState<boolean | null>(null);
-  const [confirmGameToggle, setConfirmGameToggle] = useState(false);
-  const [gameLockNotice, setGameLockNotice] = useState<string | null>(null);
-  const [gameToggling, setGameToggling] = useState(false);
 
   /* Lấy số liệu THẬT từ Supabase */
   useEffect(() => {
     const loadStats = async () => {
       try {
-        const [totalRes, eligibleRes, ineligibleRes, hasLinkRes, noLinkRes, locked, gameLockedValue, unreadFeedback, pendingResults] =
+        const [totalRes, eligibleRes, ineligibleRes, hasLinkRes, noLinkRes, locked, unreadFeedback, pendingResults] =
           await Promise.all([
             supabase.from('certificate_records').select('*', { count: 'exact', head: true }),
             supabase
@@ -84,7 +76,6 @@ export function AdminDashboard() {
               .select('*', { count: 'exact', head: true })
               .is('certificate_url', null),
             isPublicLocked(),
-            isGameLocked(),
             /* Số phản ánh chưa đọc — nuốt lỗi riêng để bảng hòm thư chưa có cũng
                không làm mất số liệu các bảng khác */
             supabase
@@ -118,7 +109,6 @@ export function AdminDashboard() {
           loading: false,
         }));
         setSiteLocked(locked);
-        setGameLocked(gameLockedValue);
       } catch {
         setStats((s) => ({ ...s, loading: false }));
       }
@@ -177,34 +167,6 @@ export function AdminDashboard() {
       );
     }
     setToggling(false);
-  };
-
-  /* Bật/tắt khóa trò chơi — bấm 1 lần để xác nhận, bấm lần 2 mới đổi */
-  const handleToggleGameLock = async () => {
-    if (!confirmGameToggle) {
-      setConfirmGameToggle(true);
-      return;
-    }
-    setConfirmGameToggle(false);
-    if (gameLocked === null) return;
-    setGameToggling(true);
-    const next = !gameLocked;
-    const { error } = await supabase
-      .from('site_settings')
-      .upsert({ key: 'game_locked', value: next ? 'true' : 'false', updated_at: new Date().toISOString() });
-    if (error) {
-      setGameLockNotice(
-        `Không đổi được trạng thái khóa: ${(error as { message?: string }).message ?? 'Có lỗi xảy ra.'} Nếu bảng cài đặt chưa có, chạy file SQL tạo bảng điểm rồi thử lại.`,
-      );
-    } else {
-      setGameLocked(next);
-      setGameLockNotice(
-        next
-          ? 'Đã khóa trò chơi: khách vào tab chạy vô tận chỉ thấy thông báo tạm khóa.'
-          : 'Đã mở trò chơi: mọi người vào tab chạy vô tận chơi và lưu điểm được.',
-      );
-    }
-    setGameToggling(false);
   };
 
   const statCards = [
@@ -378,45 +340,6 @@ export function AdminDashboard() {
         {lockNotice && <p className="mt-3 text-sm text-slate-700">{lockNotice}</p>}
       </div>
 
-      {/* Công tắc khóa trò chơi chạy */}
-      <div className="card mt-6 p-6 sm:p-7">
-        <h3 className="flex items-center gap-2.5 text-lg font-bold text-slate-900">
-          <Gamepad2 className="h-5 w-5 text-violet-600" />
-          Khóa trò chơi chạy
-        </h3>
-        {gameLocked === null ? (
-          <p className="mt-4 text-sm text-slate-500">
-            Chưa đọc được trạng thái khóa — chạy file SQL tạo bảng điểm rồi tải lại trang.
-          </p>
-        ) : (
-          <div className="mt-4 flex flex-wrap items-center gap-3">
-            <span
-              className={`rounded-full px-3 py-1 text-xs font-semibold ${
-                gameLocked
-                  ? 'bg-red-50 text-red-700 ring-1 ring-red-200'
-                  : 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200'
-              }`}
-            >
-              {gameLocked ? 'Đang khóa' : 'Đang mở'}
-            </span>
-            <button
-              onClick={() => void handleToggleGameLock()}
-              disabled={gameToggling}
-              className="rounded-xl bg-geoenv-600 px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-geoenv-700 disabled:opacity-60"
-            >
-              {gameToggling
-                ? 'Đang đổi...'
-                : confirmGameToggle
-                  ? 'Chắc chắn đổi?'
-                  : gameLocked
-                    ? 'Mở trò chơi cho mọi người'
-                    : 'Khóa trò chơi'}
-            </button>
-          </div>
-        )}
-        {gameLockNotice && <p className="mt-3 text-sm text-slate-700">{gameLockNotice}</p>}
-      </div>
-
       {/* Các khu thao tác nhanh — ✏️ sửa tên nút tại đây */}
       <div className="mt-6 grid grid-cols-1 gap-5 lg:grid-cols-2">
         <ActionCard
@@ -454,13 +377,6 @@ export function AdminDashboard() {
                   ? `${stats.pendingResults} chờ duyệt`
                   : null,
             },
-          ]}
-        />
-        <ActionCard
-          title="Trò chơi chạy"
-          icon={<Gamepad2 className="h-5 w-5 text-violet-600" />}
-          items={[
-            { to: '/quan-tri/tro-choi', label: 'Xem & xóa điểm trò chơi', icon: Gamepad2 },
           ]}
         />
       </div>

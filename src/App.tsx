@@ -18,9 +18,6 @@ const Feedback = lazy(() => import('./pages/Feedback').then((m) => ({ default: m
 const SubmitResult = lazy(() =>
   import('./pages/SubmitResult').then((m) => ({ default: m.SubmitResult })),
 );
-const ChillGame = lazy(() => import('./pages/ChillGame').then((m) => ({ default: m.ChillGame })));
-const QuizPage = lazy(() => import('./pages/QuizPage').then((m) => ({ default: m.QuizPage })));
-const RunnerPage = lazy(() => import('./pages/RunnerPage').then((m) => ({ default: m.RunnerPage })));
 const AdminFeedback = lazy(() =>
   import('./pages/AdminFeedback').then((m) => ({ default: m.AdminFeedback })),
 );
@@ -35,9 +32,6 @@ const AdminDashboard = lazy(() =>
 );
 const AdminCertificates = lazy(() =>
   import('./pages/AdminCertificates').then((m) => ({ default: m.AdminCertificates })),
-);
-const AdminGameScores = lazy(() =>
-  import('./pages/AdminGameScores').then((m) => ({ default: m.AdminGameScores })),
 );
 
 /* Web này là trang đơn (không tải lại trang khi chuyển mục) nên trình duyệt giữ
@@ -96,10 +90,6 @@ const App = () => {
           <Route path="/tra-cuu" element={<CertificateLookup />} />
           <Route path="/gop-y" element={<Feedback />} />
           <Route path="/nop-ket-qua" element={<SubmitResult />} />
-          <Route path="/goc-chill" element={<Navigate to="/minigame" replace />} />
-          <Route path="/minigame" element={<ChillGame />} />
-          <Route path="/minigame/do-vui" element={<QuizPage />} />
-          <Route path="/minigame/chay-vo-tan" element={<RunnerPage />} />
         </Route>
 
         <Route path="/quan-tri/dang-nhap" element={<AdminLogin onLogin={handleLogin} />} />
@@ -115,7 +105,6 @@ const App = () => {
           <Route path="/quan-tri/chung-nhan" element={<AdminCertificates />} />
           <Route path="/quan-tri/phan-anh" element={<AdminFeedback />} />
           <Route path="/quan-tri/ket-qua" element={<AdminResults />} />
-          <Route path="/quan-tri/tro-choi" element={<AdminGameScores />} />
         </Route>
 
         <Route path="*" element={<Navigate to="/" replace />} />
