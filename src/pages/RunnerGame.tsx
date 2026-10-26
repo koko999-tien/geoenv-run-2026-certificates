@@ -130,6 +130,7 @@ interface ShockRing {
   r: number;
   maxR: number;
   alpha: number;
+  color?: string;
 }
 
 interface ScoreRow {
@@ -291,6 +292,8 @@ interface RunnerPose {
   sliding: boolean;
   airborne: boolean;
   skin: RunnerSkin;
+  phase: number;
+  time: number;
 }
 
 function drawRunner(ctx: CanvasRenderingContext2D, p: RunnerPose) {
@@ -359,22 +362,117 @@ function drawRunner(ctx: CanvasRenderingContext2D, p: RunnerPose) {
     return;
   }
 
-  /* Chân xa + tay xa (tối hơn một tông). */
-  ctx.strokeStyle = '#172554';
-  ctx.lineWidth = 6;
-  ctx.beginPath();
-  ctx.moveTo(hip.x, hip.y);
-  ctx.lineTo(hip.x + swingB * 0.6, hip.y + 10);
-  ctx.lineTo(hip.x + swingB, 48 - liftB);
-  ctx.stroke();
-  ctx.strokeStyle = '#172554';
-  ctx.lineWidth = 5;
+  /* ---- Màu theo pha trời: kính tráng gương + viền sáng. ---- */
+  const SKY_GLASS: [string, string][] = [
+    ['#fcd34d', '#fb923c'],
+    ['#7dd3fc', '#38bdf8'],
+    ['#fb923c', '#a855f7'],
+    ['#164e63', '#0e7490'],
+  ];
+  const glass = SKY_GLASS[p.phase] ?? SKY_GLASS[1];
+  const RIM = ['rgba(254, 240, 138, 0.95)', 'rgba(254, 240, 138, 0.95)', 'rgba(253, 186, 116, 0.95)', 'rgba(165, 243, 252, 0.95)'][p.phase] ?? 'rgba(254, 240, 138, 0.95)';
+
+  /* Vẽ một chân giải phẫu: đùi phình cơ tứ đầu phía trước, bắp chuối cong
+     phía sau, cổ chân thon. */
+  const drawLeg = (
+    hipX: number, hipY: number, kneeX: number, kneeY: number,
+    footX: number, footY: number, color: string, shade: string,
+  ) => {
+    const tvx = kneeX - hipX;
+    const tvy = kneeY - hipY;
+    const tlen = Math.hypot(tvx, tvy) || 1;
+    const px = -tvy / tlen;
+    const py = tvx / tlen;
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.moveTo(hipX + px * 3.6, hipY + py * 3.6);
+    ctx.quadraticCurveTo((hipX + kneeX) / 2 - px * 1.4, (hipY + kneeY) / 2, kneeX + px * 2.2, kneeY + py * 2.2);
+    ctx.lineTo(kneeX - px * 2.2, kneeY - py * 2.2);
+    ctx.quadraticCurveTo((hipX + kneeX) / 2 + px * 0.6, (hipY + kneeY) / 2, hipX - px * 3.6, hipY - py * 3.6);
+    ctx.closePath();
+    ctx.fill();
+    const cvx = footX - kneeX;
+    const cvy = footY - kneeY;
+    const clen = Math.hypot(cvx, cvy) || 1;
+    const cpx = -cvy / clen;
+    const cpy = cvx / clen;
+    const midX = (kneeX + footX) / 2;
+    const midY = (kneeY + footY) / 2;
+    ctx.beginPath();
+    ctx.moveTo(kneeX + cpx * 2.2, kneeY + cpy * 2.2);
+    ctx.quadraticCurveTo(midX + cpx * 4.2, midY + cpy * 4.2, footX + cpx * 1.5, footY + cpy * 1.5);
+    ctx.lineTo(footX - cpx * 1.5, footY - cpy * 1.5);
+    ctx.quadraticCurveTo(midX - cpx * 1.2, midY - cpy * 1.2, kneeX - cpx * 2.2, kneeY - cpy * 2.2);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = shade;
+    ctx.beginPath();
+    ctx.ellipse(midX + cpx * 2.2, midY + cpy * 2.2, 2.2, 3.4, Math.atan2(cvy, cvx), 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.arc(kneeX, kneeY, 2.2, 0, Math.PI * 2);
+    ctx.fill();
+  };
+
+  /* Giày marathon đế rocker: foam dày 2 tầng, mũi vểnh, gót nhọn vát,
+     tấm carbon giữa đế, dải phản quang, đệm khí phát sáng khi chạm đất. */
+  const drawShoe = (footX: number, footY: number, lift: number, upper: string) => {
+    if (lift < 2) {
+      const glow = ctx.createRadialGradient(footX + 4, footY + 3, 1, footX + 4, footY + 3, 13);
+      glow.addColorStop(0, 'rgba(249, 115, 22, 0.5)');
+      glow.addColorStop(1, 'rgba(249, 115, 22, 0)');
+      ctx.fillStyle = glow;
+      ellipse(ctx, footX + 4, footY + 3, 13, 5);
+      ctx.fill();
+    }
+    ctx.fillStyle = '#f8fafc';
+    ctx.beginPath();
+    ctx.moveTo(footX - 3, footY + 0.5);
+    ctx.quadraticCurveTo(footX + 4, footY + 3.5, footX + 13, footY);
+    ctx.lineTo(footX + 13, footY - 1.5);
+    ctx.quadraticCurveTo(footX + 4, footY + 1, footX - 3, footY - 1);
+    ctx.closePath();
+    ctx.fill();
+    ctx.strokeStyle = '#1e293b';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(footX - 3, footY - 0.5);
+    ctx.quadraticCurveTo(footX + 4, footY + 1.5, footX + 13, footY - 2);
+    ctx.stroke();
+    ctx.fillStyle = upper;
+    ctx.beginPath();
+    ctx.moveTo(footX - 3, footY - 1);
+    ctx.lineTo(footX + 8, footY - 1);
+    ctx.quadraticCurveTo(footX + 13, footY - 2, footX + 13, footY - 4);
+    ctx.quadraticCurveTo(footX + 5, footY - 6, footX - 1, footY - 5);
+    ctx.quadraticCurveTo(footX - 4.5, footY - 4, footX - 3, footY - 1);
+    ctx.closePath();
+    ctx.fill();
+    ctx.strokeStyle = `rgba(165, 243, 252, ${0.55 + 0.35 * Math.sin(phase * 3)})`;
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(footX - 2, footY + 0.5);
+    ctx.lineTo(footX + 12, footY - 0.5);
+    ctx.stroke();
+  };
+
+  /* Chân xa (tối hơn) + giày xa. */
+  drawLeg(hip.x, hip.y, hip.x + swingB * 0.6, hip.y + 10, hip.x + swingB, 48 - liftB, '#c98d5f', 'rgba(120, 53, 15, 0.25)');
+  drawShoe(hip.x + swingB, 48 - liftB, liftB, '#ea580c');
+  /* Tay xa. */
+  ctx.strokeStyle = '#c98d5f';
+  ctx.lineWidth = 4.5;
   ctx.beginPath();
   ctx.moveTo(shoulder.x, shoulder.y);
   ctx.lineTo(shoulder.x + swingA * 0.5, shoulder.y + 10);
   ctx.stroke();
+  ctx.fillStyle = '#c98d5f';
+  ctx.beginPath();
+  ctx.arc(shoulder.x + swingA * 0.5, shoulder.y + 10, 2, 0, Math.PI * 2);
+  ctx.fill();
 
-  /* Thân: áo Bib giải chạy, gradient + sọc trắng + số Bib. */
+  /* Thân: áo ba lỗ gradient + đường may khí động học. */
   const pal = SKIN_PALETTES[p.skin] ?? SKIN_PALETTES.geoenv;
   const torsoGrad = ctx.createLinearGradient(0, 14, 0, 34);
   torsoGrad.addColorStop(0, pal.torso[0]);
@@ -391,10 +489,40 @@ function drawRunner(ctx: CanvasRenderingContext2D, p: RunnerPose) {
   ctx.strokeStyle = 'rgba(15, 23, 42, 0.3)';
   ctx.lineWidth = 1;
   ctx.stroke();
-  /* Quần đùi để thân dưới không bị chìm vào chân. */
+  ctx.strokeStyle = 'rgba(15, 23, 42, 0.25)';
+  ctx.lineWidth = 0.8;
+  ctx.beginPath();
+  ctx.moveTo(10.5, 16);
+  ctx.quadraticCurveTo(11.5, 24, 12, 32);
+  ctx.moveTo(25.5, 16);
+  ctx.quadraticCurveTo(24.5, 24, 24, 32);
+  ctx.stroke();
+  /* Bóng nếp gấp áo + nách (Ambient Occlusion). */
+  ctx.fillStyle = 'rgba(15, 23, 42, 0.15)';
+  ctx.beginPath();
+  ctx.ellipse(14.5, 20, 2, 2.8, 0, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(15, 23, 42, 0.15)';
+  ctx.lineWidth = 0.8;
+  ctx.beginPath();
+  ctx.moveTo(12, 29);
+  ctx.quadraticCurveTo(18, 30, 24, 29);
+  ctx.moveTo(12, 31.5);
+  ctx.quadraticCurveTo(18, 32.5, 24, 31.5);
+  ctx.stroke();
+  /* Quần đùi xẻ tà 2 bên. */
   ctx.fillStyle = '#1e293b';
   roundRectPath(ctx, 11, 30, 14, 7, 2);
   ctx.fill();
+  ctx.strokeStyle = '#f2c79b';
+  ctx.lineWidth = 1;
+  ctx.beginPath();
+  ctx.moveTo(14, 32);
+  ctx.lineTo(14, 37);
+  ctx.moveTo(22, 32);
+  ctx.lineTo(22, 37);
+  ctx.stroke();
+  /* Số BIB ngực + nếp nhăn vải chuyển động theo nhịp chạy. */
   ctx.fillStyle = '#f8fafc';
   roundRectPath(ctx, 13, 20, 10, 9, 2);
   ctx.fill();
@@ -402,8 +530,16 @@ function drawRunner(ctx: CanvasRenderingContext2D, p: RunnerPose) {
   ctx.font = 'bold 7px sans-serif';
   ctx.textAlign = 'center';
   ctx.fillText('06', 18, 27);
+  ctx.strokeStyle = 'rgba(15, 23, 42, 0.18)';
+  ctx.lineWidth = 0.7;
+  ctx.beginPath();
+  ctx.moveTo(13.5, 22.5);
+  ctx.quadraticCurveTo(18, 22.5 + Math.sin(phase * 2) * 0.8, 22.5, 22.5);
+  ctx.moveTo(13.5, 25.5);
+  ctx.quadraticCurveTo(18, 25.5 + Math.sin(phase * 2 + 1) * 0.8, 22.5, 25.5);
+  ctx.stroke();
 
-  /* Đầu: da + tóc + băng đô đỏ + mắt. */
+  /* Đầu: da + tóc đuôi ngựa bay theo gió + kính tráng gương + tai nghe. */
   ctx.fillStyle = '#f2c79b';
   ctx.beginPath();
   ctx.arc(19, 8, 8.5, 0, Math.PI * 2);
@@ -411,43 +547,109 @@ function drawRunner(ctx: CanvasRenderingContext2D, p: RunnerPose) {
   ctx.strokeStyle = 'rgba(15, 23, 42, 0.25)';
   ctx.lineWidth = 1;
   ctx.stroke();
+  /* Bóng dưới cằm. */
+  ctx.fillStyle = 'rgba(15, 23, 42, 0.2)';
+  ctx.beginPath();
+  ctx.ellipse(20, 15.8, 3.2, 1.4, 0, 0, Math.PI * 2);
+  ctx.fill();
+  /* Tóc: mũ tóc + đuôi ngựa bay ngược gió. */
   ctx.fillStyle = '#1e293b';
   ctx.beginPath();
-  ctx.arc(19, 4.5, 8.5, Math.PI, Math.PI * 2);
+  ctx.arc(19, 7.5, 8.5, Math.PI, Math.PI * 2);
+  ctx.closePath();
   ctx.fill();
-  ctx.fillStyle = '#ef4444';
-  ctx.fillRect(11, 2.5, 16, 3.5);
-  ctx.fillStyle = '#0f172a';
+  const ponytailSway = Math.sin(p.time * 6) * 2 + Math.sin(phase) * 1.2;
   ctx.beginPath();
-  ctx.arc(23, 9, 1.4, 0, Math.PI * 2);
+  ctx.moveTo(13, 2);
+  ctx.quadraticCurveTo(4, -1 + ponytailSway, -6, 1 + ponytailSway);
+  ctx.quadraticCurveTo(2, 5 + ponytailSway * 0.5, 13, 6);
+  ctx.closePath();
   ctx.fill();
+  ctx.strokeStyle = '#1e293b';
+  ctx.lineWidth = 1.2;
+  ctx.beginPath();
+  ctx.moveTo(14, 0.5);
+  ctx.quadraticCurveTo(18, -1.5, 22, 0.5);
+  ctx.moveTo(17, -0.5);
+  ctx.quadraticCurveTo(20, -2, 24, -0.5);
+  ctx.stroke();
+  /* Kính thể thao tráng gương đổi màu theo bầu trời. */
+  const glassGrad = ctx.createLinearGradient(15, 5, 29, 11);
+  glassGrad.addColorStop(0, glass[0]);
+  glassGrad.addColorStop(1, glass[1]);
+  ctx.fillStyle = glassGrad;
+  roundRectPath(ctx, 15, 6, 14, 5, 2.5);
+  ctx.fill();
+  ctx.strokeStyle = 'rgba(15, 23, 42, 0.4)';
+  ctx.lineWidth = 0.8;
+  ctx.stroke();
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.7)';
+  ctx.lineWidth = 0.8;
+  ctx.beginPath();
+  ctx.moveTo(19, 10.5);
+  ctx.lineTo(23, 6.5);
+  ctx.stroke();
+  ctx.strokeStyle = '#1e293b';
+  ctx.lineWidth = 1.2;
+  ctx.beginPath();
+  ctx.moveTo(15, 8);
+  ctx.lineTo(11, 9);
+  ctx.stroke();
+  /* Tai nghe không dây móc tai. */
+  ctx.fillStyle = '#f8fafc';
+  ctx.beginPath();
+  ctx.arc(11.5, 9.5, 1.6, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.strokeStyle = '#f8fafc';
+  ctx.lineWidth = 1.2;
+  ctx.beginPath();
+  ctx.moveTo(11.5, 11);
+  ctx.lineTo(13, 13.5);
+  ctx.stroke();
 
-  /* Tay gần + chân gần, giày đế phát sáng. */
-  ctx.strokeStyle = '#1e3a5f';
+  /* Tay gần + đồng hồ thông minh (đèn nhịp tim chớp theo thời gian). */
+  ctx.strokeStyle = '#f2c79b';
   ctx.lineWidth = 5;
   ctx.beginPath();
   ctx.moveTo(shoulder.x, shoulder.y);
   ctx.lineTo(shoulder.x + swingB * 0.5, shoulder.y + 10);
   ctx.stroke();
-  ctx.strokeStyle = '#1e3a5f';
-  ctx.lineWidth = 6;
+  const handX = shoulder.x + swingB * 0.5;
+  const handY = shoulder.y + 10;
+  ctx.fillStyle = '#f2c79b';
   ctx.beginPath();
-  ctx.moveTo(hip.x, hip.y);
-  ctx.lineTo(hip.x + swingA * 0.6, hip.y + 10);
-  ctx.lineTo(hip.x + swingA, 48 - liftA);
+  ctx.arc(handX, handY, 2.2, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = '#1e293b';
+  roundRectPath(ctx, handX - 2, handY - 2, 5, 4, 1);
+  ctx.fill();
+  ctx.fillStyle = Math.sin(p.time * 5) > 0 ? '#22c55e' : '#ef4444';
+  ctx.beginPath();
+  ctx.arc(handX + 0.5, handY, 1, 0, Math.PI * 2);
+  ctx.fill();
+
+  /* Chân gần + bóng kẽ đùi + giày gần. */
+  drawLeg(hip.x, hip.y, hip.x + swingA * 0.6, hip.y + 10, hip.x + swingA, 48 - liftA, '#f2c79b', 'rgba(180, 120, 60, 0.25)');
+  ctx.fillStyle = 'rgba(15, 23, 42, 0.15)';
+  ctx.beginPath();
+  ctx.ellipse(18, 38, 3, 4, 0, 0, Math.PI * 2);
+  ctx.fill();
+  drawShoe(hip.x + swingA, 48 - liftA, liftA, '#f97316');
+
+  /* Viền sáng 2.5D theo hướng mặt trời (trên-phải): đỉnh đầu, vai, mép trước thân. */
+  ctx.strokeStyle = RIM;
+  ctx.lineWidth = 1.2;
+  ctx.beginPath();
+  ctx.arc(19, 8, 8.5, -2.2, -0.5);
   ctx.stroke();
-  const shoeGlow = ctx.createRadialGradient(
-    hip.x + swingA, 48 - liftA, 1,
-    hip.x + swingA, 48 - liftA, 12,
-  );
-  shoeGlow.addColorStop(0, 'rgba(249, 115, 22, 0.55)');
-  shoeGlow.addColorStop(1, 'rgba(249, 115, 22, 0)');
-  ctx.fillStyle = shoeGlow;
-  ellipse(ctx, hip.x + swingA, 48 - liftA, 12, 6);
-  ctx.fill();
-  ctx.fillStyle = '#f97316';
-  roundRectPath(ctx, hip.x + swingA - 2, 46 - liftA, 11, 5, 2);
-  ctx.fill();
+  ctx.beginPath();
+  ctx.moveTo(11, 15);
+  ctx.quadraticCurveTo(18, 11.5, 26, 15);
+  ctx.stroke();
+  ctx.beginPath();
+  ctx.moveTo(26.5, 16);
+  ctx.quadraticCurveTo(26, 24, 24.5, 32);
+  ctx.stroke();
   ctx.restore();
 }
 
@@ -1656,6 +1858,9 @@ export function RunnerGame() {
     banner: null as string | null,
   });
   const hudAccRef = useRef(0);
+  /* Bước chạy gần nhất (vòng sóng tiếp đất) + nhịp hạt ruy băng. */
+  const stepRef = useRef(0);
+  const sparkleAccRef = useRef(0);
 
   useEffect(() => {
     soundEngine.enabled = soundOn;
@@ -1689,6 +1894,8 @@ export function RunnerGame() {
 
   const startGame = useCallback(() => {
     stateRef.current = initialState();
+    stepRef.current = 0;
+    sparkleAccRef.current = 0;
     setSaved(false);
     setFinalStats(null);
     setHud({ km: 0, pace: '0:00', score: 0, speedKmh: 0, combo: 1, fever: 0, banner: null });
@@ -2137,6 +2344,14 @@ export function RunnerGame() {
         ring.alpha -= dtSec * 2.2;
       }
       s.rings = s.rings.filter((ring) => ring.alpha > 0);
+      /* Vòng sóng tiếp đất mỗi bước chạy (chỉ khi chân chạm đất). */
+      if (!s.airborne && !s.sliding) {
+        const stepIdx = Math.floor(s.runCycle / Math.PI);
+        if (stepIdx !== stepRef.current) {
+          stepRef.current = stepIdx;
+          s.rings.push({ x: RUNNER_X + 18 + (stepIdx % 2 === 0 ? 6 : -6), y: GROUND + 1, r: 3, maxR: 16, alpha: 0.45, color: '255, 255, 255' });
+        }
+      }
       if (isBoosted || s.flipping || s.feverTime > 0) {
         s.ghostTimer += dtSec;
         const ghostInterval = s.feverTime > 0 ? 0.04 : 0.08;
@@ -2158,6 +2373,18 @@ export function RunnerGame() {
         const ty = pts[i - 1].y + Math.sin(clockRef.current * 9 - i * 0.9) * 1.8;
         pts[i].x += (tx - pts[i].x) * 0.45;
         pts[i].y += (ty - pts[i].y) * 0.45;
+      }
+
+      /* Hạt lấp lánh bay ra từ đuôi ruy băng theo nhịp chạy. */
+      sparkleAccRef.current += dtSec;
+      if (sparkleAccRef.current > 0.18 && s.speed > 0) {
+        sparkleAccRef.current = 0;
+        const tail = pts[pts.length - 1];
+        spawnParticle({
+          x: tail.x, y: tail.y, vx: -30 - Math.random() * 20, vy: -14 - Math.random() * 10,
+          r: 1.8, maxLife: 0.6, color: '#fde68a', additive: true, gravity: 0,
+          rot: 0, vRot: 0, shape: 'spark',
+        });
       }
 
       /* Camera: KHÔNG zoom-out nữa — zoom làm cả đường chạy co lại mỗi khi
@@ -2405,6 +2632,8 @@ export function RunnerGame() {
     drawRibbon(ctx, s.ribbon, (SKIN_PALETTES[skinRef.current] ?? SKIN_PALETTES.geoenv).ribbon);
     drawRunner(ctx, {
       skin: skinRef.current,
+      phase: Math.floor(((s.scroll / 12000) % 4 + 4) % 4),
+      time,
       top: s.y + (!s.airborne && !s.sliding ? Math.sin(s.runCycle * 2) * 1.5 : 0),
       runCycle: s.runCycle,
       lean: Math.min(0.22, s.speed * 0.012),
@@ -2450,6 +2679,22 @@ export function RunnerGame() {
       ctx.fill();
     }
 
+    /* Vệt gió khi tốc độ trên 30 km/h: sợi trắng lướt qua vai và đầu gối. */
+    if (!s.crashed && s.speed * 3.6 > 30) {
+      ctx.strokeStyle = 'rgba(255, 255, 255, 0.35)';
+      ctx.lineWidth = 1.5;
+      ctx.lineCap = 'round';
+      for (let i = 0; i < 4; i++) {
+        const yy = i % 2 === 0 ? s.y + 17 : s.y + 38;
+        const span = 170;
+        const sx = RUNNER_X + 70 - ((time * 420 + i * 53) % span);
+        ctx.beginPath();
+        ctx.moveTo(sx, yy);
+        ctx.lineTo(sx + 20 + (i % 3) * 6, yy);
+        ctx.stroke();
+      }
+    }
+
     for (const ob of s.obstacles) drawObstacle(ctx, ob, time);
     for (const item of s.items) {
       if (!item.taken) drawItem(ctx, item, time);
@@ -2481,7 +2726,7 @@ export function RunnerGame() {
     ctx.globalAlpha = 1;
 
     for (const ring of s.rings) {
-      ctx.strokeStyle = `rgba(34, 197, 94, ${ring.alpha})`;
+      ctx.strokeStyle = `rgba(${ring.color ?? '34, 197, 94'}, ${ring.alpha})`;
       ctx.lineWidth = 2.5;
       ctx.beginPath();
       ctx.arc(ring.x, ring.y, ring.r, 0, Math.PI * 2);
