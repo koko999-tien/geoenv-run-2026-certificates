@@ -2020,7 +2020,7 @@ export function RunnerGame() {
           <button
             onClick={() => setSoundOn((v) => !v)}
             aria-label="Bật/tắt âm thanh"
-            className="flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-700 transition-colors hover:border-geoenv-300 hover:text-geoenv-700"
+            className="flex h-11 w-11 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-700 transition-colors hover:border-geoenv-300 hover:text-geoenv-700"
           >
             {soundOn ? <Volume2 className="h-4 w-4" /> : <VolumeX className="h-4 w-4" />}
           </button>
@@ -2111,6 +2111,7 @@ export function RunnerGame() {
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   placeholder="Tên của bạn *"
+                  aria-label="Tên của bạn"
                   maxLength={30}
                   className="input-field"
                 />
@@ -2118,6 +2119,7 @@ export function RunnerGame() {
                   value={team}
                   onChange={(e) => setTeam(e.target.value)}
                   placeholder="Đội (không bắt buộc)"
+                  aria-label="Đội (không bắt buộc)"
                   maxLength={30}
                   className="input-field"
                 />

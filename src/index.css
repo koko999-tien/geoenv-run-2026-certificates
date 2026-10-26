@@ -193,3 +193,11 @@
 .banner-drop {
   animation: banner-drop 0.35s ease-out;
 }
+
+/* Viền focus thấy rõ khi dùng bàn phím (nút/link chưa có focus ring riêng;
+   ô nhập đã có focus ring trong .input-field nên không cần thêm). */
+a:focus-visible,
+button:focus-visible {
+  outline: 2px solid #1e5fc4;
+  outline-offset: 2px;
+}

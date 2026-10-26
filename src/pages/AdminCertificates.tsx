@@ -686,6 +686,7 @@ export function AdminCertificates() {
             type="text"
             className="input-field pl-11"
             placeholder="Tìm theo họ tên, lớp hoặc đội (gõ không dấu cũng được)..."
+            aria-label="Tìm theo họ tên, lớp hoặc đội"
             value={search}
             onChange={(e) => {
               setSearch(e.target.value);
@@ -815,6 +816,7 @@ export function AdminCertificates() {
                         <input
                           type="text"
                           className="w-full rounded-lg border border-slate-300 px-2 py-1.5 text-sm"
+                          aria-label="Họ tên đang sửa"
                           value={editing.fullName}
                           onChange={(e) =>
                             setEditing({ ...editing, fullName: e.target.value })
@@ -829,6 +831,7 @@ export function AdminCertificates() {
                         <input
                           type="text"
                           className="w-full rounded-lg border border-slate-300 px-2 py-1.5 text-sm"
+                          aria-label="Lớp đang sửa"
                           value={editing.className}
                           onChange={(e) =>
                             setEditing({ ...editing, className: e.target.value })
@@ -1124,6 +1127,15 @@ export function AdminCertificates() {
           <div
             className="cursor-pointer rounded-2xl border-2 border-dashed border-slate-300 p-6 text-center transition-colors hover:border-geoenv-400 sm:p-8"
             onClick={() => fileRef.current?.click()}
+            tabIndex={0}
+            role="button"
+            aria-label="Chọn file Excel hoặc CSV để nhập danh sách"
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                fileRef.current?.click();
+              }
+            }}
             onDragOver={(e) => e.preventDefault()}
             onDrop={(e) => {
               e.preventDefault();
