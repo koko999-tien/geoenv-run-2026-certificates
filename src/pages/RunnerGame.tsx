@@ -354,6 +354,13 @@ function drawRunner(ctx: CanvasRenderingContext2D, p: RunnerPose) {
   ctx.quadraticCurveTo(18, 36, 11, 33);
   ctx.closePath();
   ctx.fill();
+  ctx.strokeStyle = 'rgba(15, 23, 42, 0.3)';
+  ctx.lineWidth = 1;
+  ctx.stroke();
+  /* Quần đùi để thân dưới không bị chìm vào chân. */
+  ctx.fillStyle = '#1e293b';
+  roundRectPath(ctx, 11, 30, 14, 7, 2);
+  ctx.fill();
   ctx.fillStyle = '#f8fafc';
   roundRectPath(ctx, 13, 20, 10, 9, 2);
   ctx.fill();
@@ -367,6 +374,9 @@ function drawRunner(ctx: CanvasRenderingContext2D, p: RunnerPose) {
   ctx.beginPath();
   ctx.arc(19, 8, 8.5, 0, Math.PI * 2);
   ctx.fill();
+  ctx.strokeStyle = 'rgba(15, 23, 42, 0.25)';
+  ctx.lineWidth = 1;
+  ctx.stroke();
   ctx.fillStyle = '#1e293b';
   ctx.beginPath();
   ctx.arc(19, 4.5, 8.5, Math.PI, Math.PI * 2);
@@ -671,6 +681,10 @@ function drawObstacle(ctx: CanvasRenderingContext2D, ob: Obstacle, time: number)
   const box = OB_BOX[ob.kind];
   const x = ob.x;
   const top = box.yTop;
+  /* Bóng mềm dưới mỗi chướng ngại để vật thể "đứng" trên mặt đất. */
+  ctx.fillStyle = 'rgba(15, 23, 42, 0.18)';
+  ellipse(ctx, x + box.w / 2, GROUND + 4, box.w * 0.55, 3.5);
+  ctx.fill();
   ctx.save();
   switch (ob.kind) {
     case 'hurdle': {
@@ -733,16 +747,18 @@ function drawObstacle(ctx: CanvasRenderingContext2D, ob: Obstacle, time: number)
       break;
     }
     case 'drone': {
-      /* Tia laser quét xuống đất. */
-      const scan = ctx.createLinearGradient(0, top + 20, 0, GROUND);
-      scan.addColorStop(0, 'rgba(239, 68, 68, 0.35)');
-      scan.addColorStop(1, 'rgba(239, 68, 68, 0)');
-      ctx.fillStyle = scan;
+      /* Chùm quét cảm biến: lia qua lia lại, mờ và hẹp — đọc là "máy quét"
+         chứ không phải tia chết người (tia không nằm trong hộp va chạm). */
+      const sweep = Math.sin(time * 2 + ob.seed * 10) * 8;
+      const beam = ctx.createLinearGradient(0, top + 20, 0, GROUND);
+      beam.addColorStop(0, 'rgba(239, 68, 68, 0.22)');
+      beam.addColorStop(1, 'rgba(239, 68, 68, 0)');
+      ctx.fillStyle = beam;
       ctx.beginPath();
-      ctx.moveTo(x + 16, top + 20);
-      ctx.lineTo(x + 24, top + 20);
-      ctx.lineTo(x + 30, GROUND);
-      ctx.lineTo(x + 10, GROUND);
+      ctx.moveTo(x + 18, top + 20);
+      ctx.lineTo(x + 22, top + 20);
+      ctx.lineTo(x + 24 + sweep, GROUND);
+      ctx.lineTo(x + 16 + sweep, GROUND);
       ctx.closePath();
       ctx.fill();
       const bodyGrad = ctx.createLinearGradient(x, top, x, top + 22);
@@ -979,7 +995,10 @@ interface GameState {
   slideTime: number;
   speed: number;
   score: number;
-  dist: number;
+  scroll: number;
+  distM: number;
+  slowTime: number;
+  comboTimer: number;
   combo: number;
   shield: boolean;
   boostTime: number;
@@ -1055,7 +1074,10 @@ function initialState(): GameState {
     slideTime: 0,
     speed: 4.8,
     score: 0,
-    dist: 0,
+    scroll: 0,
+    distM: 0,
+    slowTime: 0,
+    comboTimer: 0,
     combo: 1,
     shield: false,
     boostTime: 0,
@@ -1246,6 +1268,10 @@ export function RunnerGame() {
   const doJump = useCallback(() => {
     const s = stateRef.current;
     if (!s.airborne) {
+      /* Nhảy từ tư thế trượt thì hủy trượt ngay — trước đây nhân vật bay
+         lên trời mà vẫn giữ tư thế trượt cho tới hết giờ trượt. */
+      s.sliding = false;
+      s.slideTime = 0;
       s.airborne = true;
       s.jumps = 1;
       s.vy = -16.5;
@@ -1304,6 +1330,13 @@ export function RunnerGame() {
     }
   }, []);
 
+  /* Nhả phím nhảy sớm khi đang bay lên thì nhảy thấp lại (variable jump). */
+  const cutJump = useCallback(() => {
+    if (phaseRef.current !== 'playing') return;
+    const s = stateRef.current;
+    if (s.airborne && s.vy < 0) s.vy *= 0.5;
+  }, []);
+
   const finishRun = useCallback(() => {
     const s = stateRef.current;
     if (s.crashed) return;
@@ -1312,9 +1345,9 @@ export function RunnerGame() {
     const finalScore = Math.floor(s.score);
     const stats: FinalStats = {
       score: finalScore,
-      km: s.dist / 1000,
+      km: s.distM / 1000,
       time: s.runTime,
-      maxSpeedKmh: s.maxSpeed * 3.2,
+      maxSpeedKmh: s.maxSpeed * 3.6,
       maxCombo: s.maxCombo,
       items: s.bottles + s.medals + s.orbs + s.crystals,
       ...rankFor(finalScore),
@@ -1340,6 +1373,13 @@ export function RunnerGame() {
       const isBoosted = s.boostTime > 0;
       if (s.boostTime > 0) s.boostTime -= dtSec;
       if (s.buffer > 0) s.buffer -= dtSec;
+      /* Combo nguội dần nếu lâu không nhặt đồ (trước đây combo lên tới ×3
+         rồi ở yên đó cả ván dù không nhặt gì thêm). */
+      if (s.comboTimer > 0) {
+        s.comboTimer -= dtSec;
+      } else if (s.combo > 1) {
+        s.combo = Math.max(1, s.combo - 0.5 * dtSec);
+      }
       s.runTime += dtSec;
 
       /* Trượt: đếm ngược thời gian trượt. */
@@ -1354,17 +1394,19 @@ export function RunnerGame() {
       s.y += s.vy * dt60;
       if (s.y >= GROUND - RUNNER_H) {
         if (s.airborne) {
+          /* Độ nén + bụi + sóng tỉ lệ với vận tốc rơi lúc chạm đất. */
+          const impact = Math.min(1, s.vy / 22);
           s.airborne = false;
           s.jumps = 0;
           s.fastFall = false;
           s.vy = 0;
           s.y = GROUND - RUNNER_H;
-          s.squashX = 1.25;
-          s.squashY = 0.78;
-          s.squashRecover = 0.15;
+          s.squashX = 1 + 0.25 * impact;
+          s.squashY = 1 - 0.22 * impact;
+          s.squashRecover = 0.12 + 0.08 * impact;
           soundEngine.land();
-          burst(RUNNER_X + 18, GROUND, '#b45309', 8, false);
-          s.rings.push({ x: RUNNER_X + 18, y: GROUND + 1, r: 4, maxR: 28, alpha: 0.7 });
+          burst(RUNNER_X + 18, GROUND, '#b45309', 6 + Math.round(10 * impact), false);
+          s.rings.push({ x: RUNNER_X + 18, y: GROUND + 1, r: 4, maxR: 24 + 16 * impact, alpha: 0.7 });
           if (s.buffer > 0) {
             s.buffer = 0;
             doJump();
@@ -1394,23 +1436,31 @@ export function RunnerGame() {
       s.squashX += (targetX - s.squashX) * k;
       s.squashY += (targetY - s.squashY) * k;
 
-      /* Tốc độ: tăng theo điểm, boost ×1.35, trần 15.5. */
+      /* Tốc độ: tăng theo điểm, boost ×1.35, vũng nước ×0.7, trần 15.5. */
+      if (s.slowTime > 0) s.slowTime -= dtSec;
       const baseSpeed = Math.min(4.8 + s.score * 0.0028, 15.5);
-      s.speed = isBoosted ? baseSpeed * 1.35 : baseSpeed;
+      const slowFactor = s.slowTime > 0 ? 0.7 : 1;
+      s.speed = baseSpeed * (isBoosted ? 1.35 : 1) * slowFactor;
       if (s.speed > s.maxSpeed) s.maxSpeed = s.speed;
 
-      /* Điểm + quãng đường (trần 100000, khớp CHECK của bảng). */
+      /* Điểm (trần 100000, khớp CHECK của bảng). */
       if (s.score < MAX_SCORE) {
         s.score = Math.min(s.score + s.speed * 0.24 * s.combo * dt60, MAX_SCORE);
       }
-      s.dist += s.speed * dt60;
+      /* scroll: quãng đường cuộn màn hình (pixel) cho parallax + sinh vật;
+         distM: mét thật (tốc độ coi như m/s) cho HUD KM — trước đây KM hiển
+         thị bị phồng vì lấy pixel chia 1000. */
+      s.scroll += s.speed * dt60;
+      s.distM += s.speed * dtSec;
 
-      /* Mốc KM: banner trượt từ trên xuống. */
-      for (const km of [1, 3, 5, 10]) {
-        if (s.dist >= km * 1000 && !s.passedKm.has(km)) {
+      /* Mốc: 500m, 1/2/5 KM, kèm pháo giấy. */
+      for (const km of [0.5, 1, 2, 5]) {
+        if (s.distM >= km * 1000 && !s.passedKm.has(km)) {
           s.passedKm.add(km);
-          s.banner = { text: `${km}KM FINISHER!`, t: 0 };
+          s.banner = { text: km === 0.5 ? '500M!' : `${km}KM FINISHER!`, t: 0 };
           soundEngine.milestone();
+          burst(RUNNER_X + 18, s.y, '#f59e0b', 12, true);
+          burst(RUNNER_X + 18, s.y, '#22c55e', 12, true);
         }
       }
       if (s.banner) {
@@ -1418,19 +1468,21 @@ export function RunnerGame() {
         if (s.banner.t > 2.2) s.banner = null;
       }
 
-      /* Sinh chướng ngại: 65% tầm thấp, 35% tầm cao (phải trượt). */
-      if (s.dist - s.lastObDist > s.nextGap) {
+      /* Sinh chướng ngại: 65% tầm thấp, 35% tầm cao (phải trượt).
+         Khoảng cách tỉ lệ với tốc độ để thời gian phản ứng không đổi khi
+         game nhanh dần. */
+      if (s.scroll - s.lastObDist > s.nextGap) {
         const low: ObKind[] = ['hurdle', 'rock', 'puddle', 'barrel'];
         const high: ObKind[] = ['drone', 'branch', 'sign'];
         const pool = Math.random() < 0.65 ? low : high;
         const kind = pool[Math.floor(Math.random() * pool.length)];
         s.obstacles.push({ x: W + 30, kind, seed: Math.random() });
-        s.lastObDist = s.dist;
-        s.nextGap = 360 + Math.random() * 320;
+        s.lastObDist = s.scroll;
+        s.nextGap = s.speed * (55 + Math.random() * 45);
       }
 
       /* Sinh vật phẩm. */
-      if (s.dist - s.lastItemDist > s.nextItemGap) {
+      if (s.scroll - s.lastItemDist > s.nextItemGap) {
         const r = Math.random();
         let kind: ItemKind = 'bottle';
         if (r < 0.35) kind = 'bottle';
@@ -1440,9 +1492,15 @@ export function RunnerGame() {
         else if (r < 0.92) kind = 'shield';
         else kind = 'booster';
         const itemY = kind === 'medal' || kind === 'crystal' ? GROUND - 85 : GROUND - 40;
-        s.items.push({ x: W + 20, y: itemY, kind, taken: false, bob: Math.random() * Math.PI });
-        s.lastItemDist = s.dist;
-        s.nextItemGap = 600 + Math.random() * 550;
+        /* Không sinh vật phẩm chồng lên chướng ngại (trước đây đồ có thể
+           nằm đúng chỗ chướng ngại, vừa không lấy được vừa ép người chơi
+           đâm vào). Gặp trường hợp đó thì bỏ lượt, thử lại sau một đoạn ngắn. */
+        const blocked = s.obstacles.some((o) => Math.abs(o.x - (W + 20)) < 130);
+        if (!blocked) {
+          s.items.push({ x: W + 20, y: itemY, kind, taken: false, bob: Math.random() * Math.PI });
+        }
+        s.lastItemDist = s.scroll;
+        s.nextItemGap = blocked ? 200 : s.speed * (90 + Math.random() * 80);
       }
 
       /* Di chuyển thế giới + hút vật phẩm khi boost. */
@@ -1498,6 +1556,26 @@ export function RunnerGame() {
           });
           s.skidMarks.push({ x: RUNNER_X + 18, alpha: 0.45 });
           if (s.skidMarks.length > 40) s.skidMarks.shift();
+        }
+      }
+      if (s.fastFall) {
+        s.sparkTimer += dtSec;
+        if (s.sparkTimer > 0.03) {
+          s.sparkTimer = 0;
+          spawnParticle({
+            x: RUNNER_X + 6 + Math.random() * 24,
+            y: s.y - 6,
+            vx: 0,
+            vy: 9,
+            r: 1.5,
+            maxLife: 0.25,
+            color: '#e2e8f0',
+            additive: true,
+            gravity: 0,
+            rot: 0,
+            vRot: 0,
+            shape: 'spark',
+          });
         }
       }
       for (const sm of s.skidMarks) {
@@ -1565,14 +1643,14 @@ export function RunnerGame() {
       hudAccRef.current += dtSec;
       if (hudAccRef.current > 0.12) {
         hudAccRef.current = 0;
-        const paceMin = 60 / Math.max(1, s.speed * 3.2);
+        const paceMin = 60 / Math.max(1, s.speed * 3.6);
         const paceMm = Math.floor(paceMin);
         const paceSs = Math.floor((paceMin - paceMm) * 60);
         setHud({
-          km: s.dist / 1000,
+          km: s.distM / 1000,
           pace: `${paceMm}:${String(paceSs).padStart(2, '0')}`,
           score: Math.floor(s.displayScore),
-          speedKmh: s.speed * 3.2,
+          speedKmh: s.speed * 3.6,
           combo: s.combo,
           banner: s.banner ? s.banner.text : null,
         });
@@ -1591,12 +1669,24 @@ export function RunnerGame() {
           runnerBox.y < obBox.y + obBox.h &&
           runnerBox.y + runnerBox.h > obBox.y;
         if (!hit) continue;
+        if (ob.kind === 'puddle') {
+          /* Vũng nước không giết người — chỉ làm chậm + bắn nước. */
+          s.slowTime = 0.6;
+          s.obstacles = s.obstacles.filter((o) => o !== ob);
+          burst(ob.x + 22, GROUND - 4, '#38bdf8', 10, false);
+          spawnText(RUNNER_X + 18, s.y - 10, 'CHẬM!', '#0284c7');
+          continue;
+        }
         if (s.shield) {
           s.shield = false;
+          /* Ăn đòn thì combo đứt — đúng nghĩa của combo. */
+          s.combo = 1;
+          s.comboTimer = 0;
           s.obstacles = s.obstacles.filter((o) => o !== ob);
           s.trauma = 0.6;
           soundEngine.shieldBreak();
           spawnText(RUNNER_X + 18, s.y - 10, 'KHIÊN VỠ!', '#f59e0b');
+          s.rings.push({ x: RUNNER_X + 18, y: s.y + 25, r: 10, maxR: 46, alpha: 0.6 });
         } else {
           finishRun();
           return;
@@ -1617,6 +1707,7 @@ export function RunnerGame() {
         if (value > 0) {
           s.score = Math.min(s.score + value, MAX_SCORE);
           s.combo = Math.min(s.combo + 0.25, 3);
+          s.comboTimer = 4;
           if (s.combo > s.maxCombo) s.maxCombo = s.combo;
           soundEngine.coin();
         } else {
@@ -1680,7 +1771,7 @@ export function RunnerGame() {
     ctx.scale(s.camScale, s.camScale);
     ctx.translate(-W / 2 + shX, -H / 2 + s.camY + shY);
 
-    drawEnvironment(ctx, s.dist, time);
+    drawEnvironment(ctx, s.scroll, time);
 
     for (const sm of s.skidMarks) {
       ctx.fillStyle = `rgba(15, 23, 42, ${sm.alpha * 0.5})`;
@@ -1700,7 +1791,7 @@ export function RunnerGame() {
 
     drawRibbon(ctx, s.ribbon);
     drawRunner(ctx, {
-      top: s.y,
+      top: s.y + (!s.airborne && !s.sliding ? Math.sin(s.runCycle * 2) * 1.5 : 0),
       runCycle: s.runCycle,
       lean: Math.min(0.22, s.speed * 0.012),
       squashX: s.squashX,
@@ -1801,6 +1892,12 @@ export function RunnerGame() {
     }
     ctx.restore();
 
+    /* Vignette nhẹ: tối dần về 4 cạnh cho khung hình có chiều sâu. */
+    const vig = ctx.createRadialGradient(W / 2, H / 2, H * 0.45, W / 2, H / 2, W * 0.7);
+    vig.addColorStop(0, 'rgba(15, 23, 42, 0)');
+    vig.addColorStop(1, 'rgba(15, 23, 42, 0.14)');
+    ctx.fillStyle = vig;
+    ctx.fillRect(0, 0, W, H);
   }, []);
 
   useEffect(() => {
@@ -1851,6 +1948,9 @@ export function RunnerGame() {
       if (e.code === 'ArrowDown' || e.key === 's' || e.key === 'S') {
         stateRef.current.fastFall = false;
       }
+      if (e.code === 'Space' || e.code === 'ArrowUp' || e.key === 'w' || e.key === 'W') {
+        cutJump();
+      }
     };
     window.addEventListener('keydown', onKey);
     window.addEventListener('keyup', onKeyUp);
@@ -1858,7 +1958,7 @@ export function RunnerGame() {
       window.removeEventListener('keydown', onKey);
       window.removeEventListener('keyup', onKeyUp);
     };
-  }, [pressJump, pressSlide, togglePause, startGame]);
+  }, [pressJump, pressSlide, togglePause, startGame, cutJump]);
 
   const [saveError, setSaveError] = useState('');
   const fmtTime = (sec: number) => {
@@ -1904,6 +2004,7 @@ export function RunnerGame() {
           onPointerDown={() => {
             if (phaseRef.current === 'playing') pressJump();
           }}
+          onPointerUp={() => cutJump()}
           className="block h-auto w-full cursor-pointer touch-none select-none"
         />
         {/* HUD bằng HTML: chữ giữ nguyên cỡ thật trên mọi màn hình, không
@@ -1971,6 +2072,7 @@ export function RunnerGame() {
             e.preventDefault();
             pressJump();
           }}
+          onPointerUp={() => cutJump()}
           aria-label="Nhảy"
           className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-geoenv-600 py-3.5 text-sm font-bold text-white shadow"
         >
