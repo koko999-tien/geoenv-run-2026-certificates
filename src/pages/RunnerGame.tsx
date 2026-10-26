@@ -5,6 +5,7 @@ import { supabase } from '../lib/supabase';
 /* Trò chơi chạy vô tận kiểu khủng long Chrome, nhân vật là vận động viên
    giải chạy: nhảy qua rào chắn, tảng đá, vũng nước; nhặt chai nước +50 điểm.
    Điểm vẽ trực tiếp lên canvas (không render lại React mỗi khung hình).
+   Tốc độ: bắt đầu chậm rồi nhanh dần (4 → 15), hệ số tốc độ hiện trên khung.
    BẢO MẬT: điểm chỉ lưu từ màn hình game over — điểm của ván vừa chơi,
    không có chỗ tự gõ điểm; trần 100000 điểm (bảng SQL cũng chặn). */
 
@@ -30,6 +31,16 @@ interface Obstacle {
 interface Bottle {
   x: number;
   taken: boolean;
+}
+
+interface Particle {
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  r: number;
+  life: number;
+  maxLife: number;
 }
 
 interface ScoreRow {
@@ -63,15 +74,105 @@ function roundRect(
   ctx.closePath();
 }
 
-/* Vận động viên: chân tay đung đưa theo khung hình, trên không thì co chân. */
+/* Nền: trời gradient, mặt trời, mây trôi, núi 2 lớp trôi với tốc độ khác nhau
+   (parallax — lớp xa trôi chậm hơn lớp gần), đường chạy tartan. */
+function drawBackground(ctx: CanvasRenderingContext2D, distance: number) {
+  const sky = ctx.createLinearGradient(0, 0, 0, GROUND);
+  sky.addColorStop(0, '#7dd3fc');
+  sky.addColorStop(0.7, '#bae6fd');
+  sky.addColorStop(1, '#e0f2fe');
+  ctx.fillStyle = sky;
+  ctx.fillRect(0, 0, W, GROUND);
+
+  ctx.fillStyle = '#fde68a';
+  ctx.beginPath();
+  ctx.arc(800, 44, 26, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = 'rgba(253, 230, 138, 0.35)';
+  ctx.beginPath();
+  ctx.arc(800, 44, 40, 0, Math.PI * 2);
+  ctx.fill();
+
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+  const clouds = [
+    { x: 120, y: 52, s: 1 },
+    { x: 430, y: 30, s: 0.7 },
+    { x: 690, y: 66, s: 1.2 },
+  ];
+  for (const c of clouds) {
+    const cx = (((c.x - distance * 0.08) % (W + 240)) + W + 240) % (W + 240) - 120;
+    const cy = c.y;
+    const s = c.s;
+    ctx.beginPath();
+    ctx.ellipse(cx, cy, 34 * s, 14 * s, 0, 0, Math.PI * 2);
+    ctx.ellipse(cx - 22 * s, cy + 4 * s, 20 * s, 10 * s, 0, 0, Math.PI * 2);
+    ctx.ellipse(cx + 24 * s, cy + 4 * s, 22 * s, 11 * s, 0, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  const farOff = (distance * 0.2) % 450;
+  ctx.fillStyle = '#a7f3d0';
+  for (let x = -450 - farOff; x < W + 450; x += 450) {
+    ctx.beginPath();
+    ctx.moveTo(x, GROUND);
+    ctx.lineTo(x + 150, GROUND - 110);
+    ctx.lineTo(x + 300, GROUND);
+    ctx.closePath();
+    ctx.fill();
+  }
+  const nearOff = (distance * 0.45) % 360;
+  ctx.fillStyle = '#6ee7b7';
+  for (let x = -360 - nearOff; x < W + 360; x += 360) {
+    ctx.beginPath();
+    ctx.moveTo(x, GROUND);
+    ctx.lineTo(x + 120, GROUND - 70);
+    ctx.lineTo(x + 240, GROUND);
+    ctx.closePath();
+    ctx.fill();
+  }
+
+  const track = ctx.createLinearGradient(0, GROUND, 0, H);
+  track.addColorStop(0, '#d97706');
+  track.addColorStop(1, '#b45309');
+  ctx.fillStyle = track;
+  ctx.fillRect(0, GROUND, W, H - GROUND);
+  ctx.fillStyle = '#f8fafc';
+  ctx.fillRect(0, GROUND, W, 3);
+  ctx.fillStyle = 'rgba(255, 255, 255, 0.55)';
+  const dashOff = distance % 120;
+  for (let i = 0; i < 9; i++) {
+    ctx.fillRect(i * 120 - dashOff, GROUND + 26, 56, 3);
+  }
+}
+
+/* Vận động viên: chu kỳ chạy 4 tư thế, trên không thì co chân, có bóng đổ
+   dưới đất (bóng nhỏ lại khi nhảy cao). */
 function drawRunner(
   ctx: CanvasRenderingContext2D,
   top: number,
   frame: number,
   airborne: boolean,
 ) {
+  const heightAbove = GROUND - RUNNER_H - top;
+  const shadowScale = Math.max(0.35, 1 - heightAbove / 260);
+  ctx.fillStyle = 'rgba(0, 0, 0, 0.22)';
+  ctx.beginPath();
+  ctx.ellipse(
+    RUNNER_X + 17,
+    GROUND + 4,
+    20 * shadowScale,
+    4 * shadowScale,
+    0,
+    0,
+    Math.PI * 2,
+  );
+  ctx.fill();
+
   const hipY = top + 38;
-  const swing = airborne ? 6 : Math.sin(frame * 0.4) * 11;
+  const cycle = Math.floor(frame / 5) % 4;
+  const swings = [-12, -4, 11, 4];
+  const swing = airborne ? 9 : swings[cycle];
+  const backSwing = airborne ? -8 : -swings[cycle];
   ctx.lineCap = 'round';
   ctx.strokeStyle = '#1e3a5f';
   ctx.lineWidth = 6;
@@ -79,25 +180,31 @@ function drawRunner(
   ctx.moveTo(RUNNER_X + 16, hipY);
   ctx.lineTo(RUNNER_X + 16 + swing, top + 48);
   ctx.moveTo(RUNNER_X + 20, hipY);
-  ctx.lineTo(RUNNER_X + 20 - swing, top + 48);
+  ctx.lineTo(RUNNER_X + 20 + backSwing, top + 48);
   ctx.stroke();
   ctx.fillStyle = '#f97316';
   ctx.fillRect(RUNNER_X + 12 + swing, top + 46, 10, 5);
-  ctx.fillRect(RUNNER_X + 16 - swing, top + 46, 10, 5);
+  ctx.fillRect(RUNNER_X + 16 + backSwing, top + 46, 10, 5);
   ctx.fillStyle = '#1e5fc4';
   roundRect(ctx, RUNNER_X + 8, top + 16, 22, 24, 7);
   ctx.fill();
+  ctx.fillStyle = '#f8fafc';
+  ctx.fillRect(RUNNER_X + 17, top + 18, 4, 20);
   ctx.strokeStyle = '#1e3a5f';
   ctx.lineWidth = 5;
   ctx.beginPath();
   ctx.moveTo(RUNNER_X + 12, top + 20);
-  ctx.lineTo(RUNNER_X + 12 - swing, top + 34);
+  ctx.lineTo(RUNNER_X + 12 + backSwing, top + 34);
   ctx.moveTo(RUNNER_X + 26, top + 20);
   ctx.lineTo(RUNNER_X + 26 + swing, top + 34);
   ctx.stroke();
   ctx.fillStyle = '#f2c79b';
   ctx.beginPath();
   ctx.arc(RUNNER_X + 19, top + 8, 9, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.fillStyle = '#1e293b';
+  ctx.beginPath();
+  ctx.arc(RUNNER_X + 19, top + 4, 9, Math.PI, Math.PI * 2);
   ctx.fill();
   ctx.fillStyle = '#ef4444';
   ctx.fillRect(RUNNER_X + 10, top + 2, 18, 4);
@@ -107,16 +214,18 @@ function drawObstacle(ctx: CanvasRenderingContext2D, ob: Obstacle) {
   const { w, h } = OB_SIZE[ob.kind];
   const y = GROUND - h;
   if (ob.kind === 'hurdle') {
-    ctx.fillStyle = '#64748b';
-    ctx.fillRect(ob.x, y, 4, h);
-    ctx.fillRect(ob.x + w - 4, y, 4, h);
+    ctx.fillStyle = '#475569';
+    ctx.fillRect(ob.x, y + 6, 4, h - 6);
+    ctx.fillRect(ob.x + w - 4, y + 6, 4, h - 6);
+    ctx.fillRect(ob.x - 3, GROUND - 3, 10, 3);
+    ctx.fillRect(ob.x + w - 7, GROUND - 3, 10, 3);
     ctx.fillStyle = '#f97316';
-    ctx.fillRect(ob.x - 2, y, w + 4, 8);
+    ctx.fillRect(ob.x - 2, y, w + 4, 9);
     ctx.fillStyle = '#ffffff';
-    ctx.fillRect(ob.x + 5, y, 6, 8);
-    ctx.fillRect(ob.x + w - 11, y, 6, 8);
+    ctx.fillRect(ob.x + 5, y, 6, 9);
+    ctx.fillRect(ob.x + w - 11, y, 6, 9);
   } else if (ob.kind === 'rock') {
-    ctx.fillStyle = '#94a3b8';
+    ctx.fillStyle = '#64748b';
     ctx.beginPath();
     ctx.moveTo(ob.x, GROUND);
     ctx.lineTo(ob.x + 6, y + 6);
@@ -125,19 +234,38 @@ function drawObstacle(ctx: CanvasRenderingContext2D, ob: Obstacle) {
     ctx.lineTo(ob.x + w, GROUND);
     ctx.closePath();
     ctx.fill();
+    ctx.fillStyle = '#94a3b8';
+    ctx.beginPath();
+    ctx.moveTo(ob.x + 6, y + 6);
+    ctx.lineTo(ob.x + 18, y);
+    ctx.lineTo(ob.x + 24, y + 10);
+    ctx.lineTo(ob.x + 12, y + 12);
+    ctx.closePath();
+    ctx.fill();
   } else {
     ctx.fillStyle = '#38bdf8';
     ctx.beginPath();
     ctx.ellipse(ob.x + w / 2, GROUND - 4, w / 2, 6, 0, 0, Math.PI * 2);
     ctx.fill();
+    ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
+    ctx.beginPath();
+    ctx.ellipse(ob.x + w / 2 - 8, GROUND - 5, 8, 2.5, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(56, 189, 248, 0.5)';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.ellipse(ob.x + w / 2, GROUND - 4, w / 2 + 4, 8, 0, 0, Math.PI * 2);
+    ctx.stroke();
   }
 }
 
 function drawBottle(ctx: CanvasRenderingContext2D, x: number) {
-  ctx.fillStyle = '#0ea5e9';
-  roundRect(ctx, x, GROUND - 26, 14, 22, 3);
+  ctx.fillStyle = '#7dd3fc';
+  roundRect(ctx, x, GROUND - 26, 14, 22, 4);
   ctx.fill();
-  ctx.fillStyle = '#0284c7';
+  ctx.fillStyle = '#0ea5e9';
+  ctx.fillRect(x + 2, GROUND - 18, 10, 8);
+  ctx.fillStyle = '#e0f2fe';
   ctx.fillRect(x + 4, GROUND - 31, 6, 5);
 }
 
@@ -168,15 +296,19 @@ export function RunnerGame() {
     vy: 0,
     airborne: false,
     frame: 0,
-    speed: 6,
+    speed: 4,
     score: 0,
     distance: 0,
     lastObDist: 0,
     nextGap: 500,
     lastBottleDist: 0,
     nextBottleGap: 900,
+    lastMilestone: 0,
+    milestoneText: '',
+    milestoneUntil: 0,
     obstacles: [] as Obstacle[],
     bottles: [] as Bottle[],
+    particles: [] as Particle[],
   });
   const phaseRef = useRef<Phase>('ready');
 
@@ -191,15 +323,19 @@ export function RunnerGame() {
       vy: 0,
       airborne: false,
       frame: 0,
-      speed: 6,
+      speed: 4,
       score: 0,
       distance: 0,
       lastObDist: 0,
       nextGap: 500,
       lastBottleDist: 0,
       nextBottleGap: 900,
+      lastMilestone: 0,
+      milestoneText: '',
+      milestoneUntil: 0,
       obstacles: [],
       bottles: [],
+      particles: [],
     };
   };
 
@@ -238,7 +374,8 @@ export function RunnerGame() {
     }
   }, []);
 
-  /* Vòng lặp vẽ: nền, núi, mặt đường, vận động viên, chướng ngại, chai nước. */
+  /* Vòng lặp vẽ: nền, núi, đường chạy, vận động viên, chướng ngại, chai nước,
+     hạt bụi, vạch tốc độ, mốc mét. */
   useEffect(() => {
     let raf = 0;
     const step = () => {
@@ -255,16 +392,28 @@ export function RunnerGame() {
               s.y = GROUND - RUNNER_H;
               s.airborne = false;
               s.vy = 0;
+              for (let i = 0; i < 6; i++) {
+                s.particles.push({
+                  x: RUNNER_X + 10 + Math.random() * 24,
+                  y: GROUND,
+                  vx: -1 - Math.random() * 2,
+                  vy: -1 - Math.random() * 2,
+                  r: 2 + Math.random() * 3,
+                  life: 0,
+                  maxLife: 18 + Math.random() * 10,
+                });
+              }
             }
           }
-          s.speed = Math.min(6 + s.score * 0.002, 13);
+          /* Tốc độ: bắt đầu chậm (4) rồi nhanh dần lên tối đa 15. */
+          s.speed = Math.min(4 + s.score * 0.003, 15);
           s.score += s.speed * 0.22;
           s.distance += s.speed;
           if (s.distance - s.lastObDist > s.nextGap) {
             const kinds: ObKind[] = ['hurdle', 'rock', 'puddle'];
             s.obstacles.push({ x: W + 20, kind: kinds[Math.floor(Math.random() * kinds.length)] });
             s.lastObDist = s.distance;
-            s.nextGap = 340 + Math.random() * 280;
+            s.nextGap = 380 + Math.random() * 300;
           }
           if (s.distance - s.lastBottleDist > s.nextBottleGap) {
             s.bottles.push({ x: W + 20, taken: false });
@@ -275,6 +424,29 @@ export function RunnerGame() {
           for (const b of s.bottles) b.x -= s.speed;
           s.obstacles = s.obstacles.filter((o) => o.x + 60 > 0);
           s.bottles = s.bottles.filter((b) => b.x + 30 > 0 && !b.taken);
+          if (!s.airborne && s.frame % 6 === 0) {
+            s.particles.push({
+              x: RUNNER_X + 4,
+              y: GROUND,
+              vx: -1 - Math.random(),
+              vy: -0.5 - Math.random(),
+              r: 1.5 + Math.random() * 2,
+              life: 0,
+              maxLife: 16 + Math.random() * 8,
+            });
+          }
+          for (const p of s.particles) {
+            p.x += p.vx;
+            p.y += p.vy;
+            p.life++;
+          }
+          s.particles = s.particles.filter((p) => p.life < p.maxLife);
+          const milestone = Math.floor(s.score / 500);
+          if (milestone > s.lastMilestone) {
+            s.lastMilestone = milestone;
+            s.milestoneText = `${milestone * 500}m!`;
+            s.milestoneUntil = s.frame + 90;
+          }
           const runnerBox = { x: RUNNER_X + 6, y: s.y + 4, w: RUNNER_W - 12, h: RUNNER_H - 6 };
           let hit = false;
           for (const ob of s.obstacles) {
@@ -296,42 +468,54 @@ export function RunnerGame() {
         }
 
         ctx.clearRect(0, 0, W, H);
-        ctx.fillStyle = '#eaf6ff';
-        ctx.fillRect(0, 0, W, H);
-        ctx.fillStyle = '#bbf7d0';
-        ctx.beginPath();
-        ctx.moveTo(0, GROUND);
-        ctx.lineTo(180, GROUND - 90);
-        ctx.lineTo(360, GROUND);
-        ctx.closePath();
-        ctx.fill();
-        ctx.beginPath();
-        ctx.moveTo(520, GROUND);
-        ctx.lineTo(680, GROUND - 70);
-        ctx.lineTo(840, GROUND);
-        ctx.closePath();
-        ctx.fill();
-        ctx.fillStyle = '#dcfce7';
-        ctx.fillRect(0, GROUND, W, H - GROUND);
-        ctx.fillStyle = '#86efac';
-        ctx.fillRect(0, GROUND, W, 2);
-        ctx.fillStyle = '#86efac';
-        const dashOff = s.distance % 180;
-        for (let i = 0; i < 6; i++) {
-          ctx.fillRect(i * 180 - dashOff, GROUND + 24, 60, 3);
+        drawBackground(ctx, s.distance);
+        for (const p of s.particles) {
+          ctx.fillStyle = `rgba(120, 80, 40, ${0.35 * (1 - p.life / p.maxLife)})`;
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, p.r, 0, Math.PI * 2);
+          ctx.fill();
         }
         for (const b of s.bottles) drawBottle(ctx, b.x);
         for (const ob of s.obstacles) drawObstacle(ctx, ob);
         drawRunner(ctx, s.y, s.frame, s.airborne);
+        if (s.speed > 9 && phaseRef.current === 'playing') {
+          ctx.strokeStyle = 'rgba(255, 255, 255, 0.65)';
+          ctx.lineWidth = 2;
+          for (let i = 0; i < 4; i++) {
+            const ly = 40 + ((i * 53 + s.frame * 3) % 180);
+            const lx = ((i * 271 + s.frame * 7) % (W + 200)) - 100;
+            ctx.beginPath();
+            ctx.moveTo(lx, ly);
+            ctx.lineTo(lx + 60, ly);
+            ctx.stroke();
+          }
+        }
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.88)';
+        roundRect(ctx, W - 168, 12, 152, 56, 12);
+        ctx.fill();
         ctx.fillStyle = '#0f172a';
-        ctx.font = 'bold 22px sans-serif';
         ctx.textAlign = 'right';
-        ctx.fillText(`Điểm: ${Math.floor(s.score)}`, W - 16, 32);
-        if (phaseRef.current === 'ready') {
+        ctx.font = 'bold 22px sans-serif';
+        ctx.fillText(`Điểm: ${Math.floor(s.score)}`, W - 28, 36);
+        ctx.font = 'bold 14px sans-serif';
+        ctx.fillStyle = '#b45309';
+        ctx.fillText(`Tốc độ x${(s.speed / 4).toFixed(1)}`, W - 28, 58);
+        if (s.frame < s.milestoneUntil && s.milestoneText) {
           ctx.textAlign = 'center';
+          ctx.font = 'bold 34px sans-serif';
+          ctx.fillStyle = '#0f172a';
+          ctx.fillText(s.milestoneText, W / 2, 100);
+        }
+        if (phaseRef.current === 'ready') {
+          ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+          roundRect(ctx, W / 2 - 230, 62, 460, 92, 16);
+          ctx.fill();
+          ctx.textAlign = 'center';
+          ctx.fillStyle = '#0f172a';
           ctx.font = 'bold 26px sans-serif';
           ctx.fillText('Nhấn để bắt đầu chạy!', W / 2, 100);
           ctx.font = '18px sans-serif';
+          ctx.fillStyle = '#475569';
           ctx.fillText('Phím cách hoặc chạm vào khung game để nhảy', W / 2, 132);
         }
       }
@@ -429,7 +613,7 @@ export function RunnerGame() {
           {phase === 'ready' ? 'Bắt đầu chạy' : 'Chơi lại'}
         </button>
         <p className="text-sm text-slate-600">
-          Phím cách hoặc chạm vào khung game để nhảy · Nhặt chai nước +50 điểm
+          Phím cách hoặc chạm vào khung game để nhảy · Nhặt chai nước +50 điểm · Càng chạy càng nhanh
           {best > 0 && (
             <>
               {' · '}
