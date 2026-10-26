@@ -11,6 +11,9 @@ import {
   ArrowUp,
   ArrowDown,
   Medal,
+  Download,
+  Palette,
+  Flame,
 } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 
@@ -43,10 +46,31 @@ type Phase = 'ready' | 'playing' | 'paused' | 'over';
 type ObKind = 'hurdle' | 'rock' | 'puddle' | 'drone' | 'barrel' | 'branch' | 'sign';
 type ItemKind = 'bottle' | 'medal' | 'shield' | 'booster' | 'eco' | 'crystal';
 
+export type RunnerSkin = 'geoenv' | 'cyber' | 'champion';
+
+interface ArchGate {
+  x: number;
+  distanceMark: number;
+  passed: boolean;
+}
+
+interface WeatherParticle {
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  r: number;
+  color: string;
+  kind: 'petal' | 'rain' | 'firefly';
+  rot: number;
+  vRot: number;
+}
+
 interface Obstacle {
   x: number;
   kind: ObKind;
   seed: number;
+  nearMissed?: boolean;
 }
 
 interface Item {
@@ -1041,6 +1065,10 @@ interface GameState {
   maxSpeed: number;
   maxCombo: number;
   crashed: boolean;
+  fever: number;
+  feverTime: number;
+  archGates: ArchGate[];
+  weatherParticles: WeatherParticle[];
 }
 
 function createParticles(): Particle[] {
@@ -1120,6 +1148,10 @@ function initialState(): GameState {
     maxSpeed: 4.8,
     maxCombo: 1,
     crashed: false,
+    fever: 0,
+    feverTime: 0,
+    archGates: [],
+    weatherParticles: [],
   };
 }
 
@@ -1139,6 +1171,157 @@ interface FinalStats {
   items: number;
   rank: string;
   title: string;
+}
+
+/* =========================================================================
+   BỘ TẠO CHỨNG NHẬN THÀNH TÍCH MARATHON ĐIỆN TỬ (OFFSCREEN 1200x630 CANVAS)
+   ========================================================================= */
+function generateCertificate(
+  stats: FinalStats,
+  playerName: string,
+  teamName: string,
+  skinName: RunnerSkin,
+) {
+  const cW = 1200;
+  const cH = 630;
+  const offCanvas = document.createElement('canvas');
+  offCanvas.width = cW;
+  offCanvas.height = cH;
+  const ctx = offCanvas.getContext('2d');
+  if (!ctx) return;
+
+  const bgGrad = ctx.createLinearGradient(0, 0, cW, cH);
+  bgGrad.addColorStop(0, '#090d16');
+  bgGrad.addColorStop(0.5, '#0f172a');
+  bgGrad.addColorStop(1, '#022c22');
+  ctx.fillStyle = bgGrad;
+  ctx.fillRect(0, 0, cW, cH);
+
+  // Lưới trang trí
+  ctx.strokeStyle = 'rgba(255, 255, 255, 0.035)';
+  ctx.lineWidth = 1;
+  for (let x = 0; x < cW; x += 40) {
+    ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, cH); ctx.stroke();
+  }
+  for (let y = 0; y < cH; y += 40) {
+    ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(cW, y); ctx.stroke();
+  }
+
+  // Khung viền kim loại đôi
+  ctx.strokeStyle = '#059669';
+  ctx.lineWidth = 4;
+  roundRectPath(ctx, 24, 24, cW - 48, cH - 48, 16);
+  ctx.stroke();
+
+  ctx.strokeStyle = '#f59e0b';
+  ctx.lineWidth = 1.5;
+  roundRectPath(ctx, 32, 32, cW - 64, cH - 64, 12);
+  ctx.stroke();
+
+  // Tiêu đề
+  ctx.textAlign = 'center';
+  ctx.fillStyle = '#34d399';
+  ctx.font = 'bold 15px sans-serif';
+  ctx.fillText('★ GIẢI CHẠY THỂ THAO TRỰC TUYẾN GEOENV RUN 2026 ★', cW / 2, 74);
+
+  ctx.fillStyle = '#fbbf24';
+  ctx.font = '900 38px sans-serif';
+  ctx.fillText('CHỨNG NHẬN HOÀN THÀNH CỰ LY', cW / 2, 122);
+
+  ctx.fillStyle = '#94a3b8';
+  ctx.font = '500 16px sans-serif';
+  ctx.fillText('Chứng nhận thành tích vận động viên xuất sắc đã nỗ lực chinh phục cung đường chạy', cW / 2, 152);
+
+  const displayName = playerName.trim() || 'Vận Động Viên Khuyết Danh';
+  ctx.fillStyle = '#ffffff';
+  ctx.font = 'bold 34px sans-serif';
+  ctx.fillText(displayName.toUpperCase(), cW / 2, 206);
+
+  ctx.fillStyle = '#38bdf8';
+  ctx.font = 'bold 16px sans-serif';
+  const displayTeam = teamName.trim() ? `Đội thi đấu: ${teamName}` : 'Hạng mục: Cá Nhân Chuyên Nghiệp';
+  ctx.fillText(displayTeam, cW / 2, 234);
+
+  // Ô điểm nhấn cự ly
+  const boxW = 540;
+  const boxH = 92;
+  const boxX = cW / 2 - boxW / 2;
+  const boxY = 262;
+  ctx.fillStyle = 'rgba(15, 23, 42, 0.85)';
+  roundRectPath(ctx, boxX, boxY, boxW, boxH, 16);
+  ctx.fill();
+  ctx.strokeStyle = '#f59e0b';
+  ctx.lineWidth = 2;
+  ctx.stroke();
+
+  ctx.fillStyle = '#94a3b8';
+  ctx.font = 'bold 13px sans-serif';
+  ctx.fillText('TỔNG QUÃNG ĐƯỜNG CHINH PHỤC', cW / 2, boxY + 28);
+
+  ctx.fillStyle = '#10b981';
+  ctx.font = '900 46px sans-serif';
+  ctx.fillText(`${stats.km.toFixed(2)} KM (${stats.score.toLocaleString('vi-VN')} ĐIỂM)`, cW / 2, boxY + 74);
+
+  // 4 Thẻ chỉ số thành tích
+  const cardW = 230;
+  const cardH = 88;
+  const startX = 115;
+  const cardY = 382;
+  const metrics = [
+    { label: 'DANH HIỆU', val: stats.title, color: '#f59e0b' },
+    { label: 'TỐC ĐỘ MAX', val: `${stats.maxSpeedKmh.toFixed(1)} km/h`, color: '#f97316' },
+    { label: 'VẬT PHẨM THU THẬP', val: `${stats.items} vật phẩm`, color: '#38bdf8' },
+    { label: 'CHUỖI COMBO MAX', val: `×${stats.maxCombo.toFixed(2)} Perfect`, color: '#ec4899' },
+  ];
+
+  metrics.forEach((m, idx) => {
+    const cx = startX + idx * (cardW + 18);
+    ctx.fillStyle = 'rgba(30, 41, 59, 0.7)';
+    roundRectPath(ctx, cx, cardY, cardW, cardH, 12);
+    ctx.fill();
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
+    ctx.lineWidth = 1;
+    ctx.stroke();
+
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#94a3b8';
+    ctx.font = 'bold 11px sans-serif';
+    ctx.fillText(m.label, cx + cardW / 2, cardY + 28);
+
+    ctx.fillStyle = m.color;
+    ctx.font = 'bold 18px sans-serif';
+    ctx.fillText(m.val, cx + cardW / 2, cardY + 62);
+  });
+
+  // Dấu mộc số hóa xác thực
+  const stampX = cW - 145;
+  const stampY = 530;
+  ctx.strokeStyle = '#ef4444';
+  ctx.lineWidth = 3;
+  ctx.beginPath(); ctx.arc(stampX, stampY, 46, 0, Math.PI * 2); ctx.stroke();
+  ctx.beginPath(); ctx.arc(stampX, stampY, 40, 0, Math.PI * 2); ctx.stroke();
+  ctx.fillStyle = '#ef4444';
+  ctx.font = '900 9px sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText('GEOENV RUN', stampX, stampY - 14);
+  ctx.font = '900 12px sans-serif';
+  ctx.fillText('★ VERIFIED ★', stampX, stampY + 2);
+  ctx.font = 'bold 8px sans-serif';
+  ctx.fillText('BAN TỔ CHỨC', stampX, stampY + 16);
+
+  ctx.textAlign = 'left';
+  ctx.fillStyle = '#64748b';
+  ctx.font = '12px sans-serif';
+  const dateStr = new Date().toLocaleDateString('vi-VN', { day: '2-digit', month: '2-digit', year: 'numeric' });
+  ctx.fillText(`Ngày xác lập: ${dateStr}`, 60, 520);
+  ctx.fillText(`Trang phục: ${skinName.toUpperCase()} · Phiên bản: GEOENV RUN V4.0`, 60, 542);
+  const certId = `GER-2026-${Math.abs(stats.score * 31 + 7919).toString(36).toUpperCase()}`;
+  ctx.fillText(`Mã chứng nhận điện tử: #${certId}`, 60, 564);
+
+  const link = document.createElement('a');
+  link.download = `chung-nhan-geoenv-run-${displayName.replace(/\s+/g, '-').toLowerCase()}-${stats.score}d.png`;
+  link.href = offCanvas.toDataURL('image/png');
+  link.click();
 }
 
 export function RunnerGame() {
@@ -1169,6 +1352,15 @@ export function RunnerGame() {
   const [scores, setScores] = useState<ScoreRow[]>([]);
   const [scoresError, setScoresError] = useState(false);
   const [finalStats, setFinalStats] = useState<FinalStats | null>(null);
+  const [skin, setSkin] = useState<RunnerSkin>(() => {
+    const saved = typeof window !== 'undefined' ? (window.localStorage.getItem('geoenv-runner-skin') as RunnerSkin) : 'geoenv';
+    return saved === 'cyber' || saved === 'champion' ? saved : 'geoenv';
+  });
+
+  const selectSkin = (newSkin: RunnerSkin) => {
+    setSkin(newSkin);
+    if (typeof window !== 'undefined') window.localStorage.setItem('geoenv-runner-skin', newSkin);
+  };
   /* HUD hiển thị bằng HTML (đọc được mọi màn hình) thay vì vẽ trong canvas:
      game chỉ đồng bộ khoảng 8 lần/giây để khỏi re-render mỗi frame. */
   const [hud, setHud] = useState({
@@ -1200,7 +1392,7 @@ export function RunnerGame() {
       return;
     }
     setScores((data ?? []) as ScoreRow[]);
-  }, []);
+  }, [skin]);
 
   useEffect(() => {
     void loadScores();
@@ -2082,7 +2274,37 @@ export function RunnerGame() {
       </div>
 
       <div className="mt-4 flex flex-wrap items-center justify-between gap-4">
-        <div className="flex items-center gap-3">
+        <div className="flex flex-wrap items-center gap-3">
+          {/* Bộ chọn Skin */}
+          <div className="inline-flex items-center gap-1 rounded-xl bg-slate-100 p-1 border border-slate-200">
+            <span className="px-1.5 text-xs font-semibold text-slate-500 hidden sm:inline-flex items-center gap-1">
+              <Palette className="h-3.5 w-3.5 text-geoenv-600" /> Skin:
+            </span>
+            <button
+              onClick={() => selectSkin('geoenv')}
+              className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-bold transition ${
+                skin === 'geoenv' ? 'bg-emerald-600 text-white shadow-sm' : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <span className="h-2 w-2 rounded-full bg-emerald-400 inline-block ring-1 ring-white" /> GeoEnv Pro
+            </button>
+            <button
+              onClick={() => selectSkin('cyber')}
+              className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-bold transition ${
+                skin === 'cyber' ? 'bg-slate-900 text-cyan-400 shadow-sm' : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <span className="h-2 w-2 rounded-full bg-cyan-400 inline-block ring-1 ring-white" /> Cyber Neon
+            </button>
+            <button
+              onClick={() => selectSkin('champion')}
+              className={`flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-xs font-bold transition ${
+                skin === 'champion' ? 'bg-amber-500 text-slate-950 shadow-sm' : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <span className="h-2 w-2 rounded-full bg-amber-400 inline-block ring-1 ring-white" /> Golden Champ
+            </button>
+          </div>
           {phase === 'ready' && (
             <button
               onClick={startGame}
@@ -2142,6 +2364,10 @@ export function RunnerGame() {
           <span className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-xs font-semibold text-slate-600">
             <Zap className="h-3.5 w-3.5 text-amber-500" />
             Tăng tốc 4 giây
+          </span>
+          <span className="flex items-center gap-1.5 rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-xs font-semibold text-slate-600">
+            <Flame className="h-3.5 w-3.5 text-rose-500" />
+            Super Fever ×3
           </span>
         </div>
       </div>
@@ -2204,6 +2430,17 @@ export function RunnerGame() {
                 {finalStats.items}
               </p>
             </div>
+          </div>
+
+          {/* Nút Tải Chứng Nhận Thành Tích PNG */}
+          <div className="mt-4 flex flex-wrap items-center justify-center gap-3">
+            <button
+              onClick={() => generateCertificate(finalStats, name, team, skin)}
+              className="inline-flex items-center gap-2 rounded-xl bg-gradient-to-r from-amber-400 to-amber-300 px-5 py-2.5 text-xs font-bold text-amber-950 shadow transition hover:from-amber-300 hover:to-amber-200"
+            >
+              <Download className="h-4 w-4 text-amber-900" />
+              Tải Chứng Nhận Thành Tích (PNG)
+            </button>
           </div>
 
           {!saved ? (
