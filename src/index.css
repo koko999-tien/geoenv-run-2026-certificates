@@ -178,3 +178,18 @@
     animation: none !important;
   }
 }
+
+@keyframes banner-drop {
+  from {
+    transform: translateY(-16px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+.banner-drop {
+  animation: banner-drop 0.35s ease-out;
+}

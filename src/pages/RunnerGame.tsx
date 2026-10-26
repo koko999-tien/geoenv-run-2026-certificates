@@ -273,8 +273,10 @@ function drawRunner(ctx: CanvasRenderingContext2D, p: RunnerPose) {
 
   ctx.save();
   ctx.translate(cx, feetY);
-  ctx.rotate(p.lean);
-  ctx.scale(p.squashX, p.squashY);
+  /* Khi trượt đã có tư thế thấp riêng: không nghiêng, không nén thêm nữa
+     kẻo hình bị bẹp dí. */
+  ctx.rotate(p.sliding ? 0 : p.lean);
+  ctx.scale(p.sliding ? 1 : p.squashX, p.sliding ? 1 : p.squashY);
   ctx.translate(0, -RUNNER_H);
   /* Lộn vòng nhảy kép: xoay quanh tâm thân. */
   if (p.flip !== 0) {
@@ -1145,6 +1147,17 @@ export function RunnerGame() {
   const [scores, setScores] = useState<ScoreRow[]>([]);
   const [scoresError, setScoresError] = useState(false);
   const [finalStats, setFinalStats] = useState<FinalStats | null>(null);
+  /* HUD hiển thị bằng HTML (đọc được mọi màn hình) thay vì vẽ trong canvas:
+     game chỉ đồng bộ khoảng 8 lần/giây để khỏi re-render mỗi frame. */
+  const [hud, setHud] = useState({
+    km: 0,
+    pace: '0:00',
+    score: 0,
+    speedKmh: 0,
+    combo: 1,
+    banner: null as string | null,
+  });
+  const hudAccRef = useRef(0);
 
   useEffect(() => {
     soundEngine.enabled = soundOn;
@@ -1180,6 +1193,7 @@ export function RunnerGame() {
     stateRef.current = initialState();
     setSaved(false);
     setFinalStats(null);
+    setHud({ km: 0, pace: '0:00', score: 0, speedKmh: 0, combo: 1, banner: null });
     soundEngine.unlock();
     soundEngine.click();
     setPhaseBoth('playing');
@@ -1547,6 +1561,23 @@ export function RunnerGame() {
       /* Điểm hiển thị lăn mượt về điểm thật (rolling counter). */
       s.displayScore += (s.score - s.displayScore) * (1 - Math.exp(-8 * dtSec));
 
+      /* Đồng bộ HUD HTML khoảng 8 lần/giây. */
+      hudAccRef.current += dtSec;
+      if (hudAccRef.current > 0.12) {
+        hudAccRef.current = 0;
+        const paceMin = 60 / Math.max(1, s.speed * 3.2);
+        const paceMm = Math.floor(paceMin);
+        const paceSs = Math.floor((paceMin - paceMm) * 60);
+        setHud({
+          km: s.dist / 1000,
+          pace: `${paceMm}:${String(paceSs).padStart(2, '0')}`,
+          score: Math.floor(s.displayScore),
+          speedKmh: s.speed * 3.2,
+          combo: s.combo,
+          banner: s.banner ? s.banner.text : null,
+        });
+      }
+
       /* Va chạm chướng ngại. */
       const runnerBox = s.sliding
         ? { x: RUNNER_X + 2, y: s.y + 26, w: 44, h: 22 }
@@ -1770,72 +1801,6 @@ export function RunnerGame() {
     }
     ctx.restore();
 
-    /* HUD glassmorphism: quãng đường + pace, điểm + tốc độ, thanh combo. */
-    const panel = (x: number, y: number, w: number, h: number) => {
-      ctx.fillStyle = 'rgba(255, 255, 255, 0.72)';
-      roundRectPath(ctx, x, y, w, h, 10);
-      ctx.fill();
-      ctx.strokeStyle = 'rgba(15, 23, 42, 0.08)';
-      ctx.lineWidth = 1;
-      ctx.stroke();
-    };
-    panel(12, 12, 150, 64);
-    panel(W - 162, 12, 150, 64);
-    ctx.textAlign = 'left';
-    ctx.fillStyle = '#64748b';
-    ctx.font = '600 9px sans-serif';
-    ctx.fillText('QUÃNG ĐƯỜNG', 22, 26);
-    ctx.fillStyle = '#0f172a';
-    ctx.font = '800 17px sans-serif';
-    ctx.fillText(`${(s.dist / 1000).toFixed(2)} KM`, 22, 46);
-    const paceMin = 60 / Math.max(1, s.speed * 3.2);
-    const paceMm = Math.floor(paceMin);
-    const paceSs = Math.floor((paceMin - paceMm) * 60);
-    ctx.fillStyle = '#475569';
-    ctx.font = '600 10px sans-serif';
-    ctx.fillText(`Pace ${paceMm}:${String(paceSs).padStart(2, '0')} /km`, 22, 62);
-    ctx.fillStyle = '#64748b';
-    ctx.font = '600 9px sans-serif';
-    ctx.fillText('ĐIỂM', W - 152, 26);
-    ctx.fillStyle = '#0f172a';
-    ctx.font = '800 17px sans-serif';
-    ctx.fillText(String(Math.floor(s.displayScore)), W - 152, 46);
-    ctx.fillStyle = '#475569';
-    ctx.font = '600 10px sans-serif';
-    ctx.fillText(`Tốc độ ${(s.speed * 3.2).toFixed(1)} km/h`, W - 152, 62);
-    if (s.combo > 1) {
-      ctx.fillStyle = 'rgba(15, 23, 42, 0.18)';
-      roundRectPath(ctx, 12, 82, 150, 10, 5);
-      ctx.fill();
-      ctx.fillStyle = '#16a34a';
-      roundRectPath(ctx, 12, 82, 150 * ((s.combo - 1) / 2), 10, 5);
-      ctx.fill();
-      ctx.fillStyle = '#ffffff';
-      ctx.font = '800 8px sans-serif';
-      ctx.textAlign = 'center';
-      ctx.fillText(`COMBO ×${s.combo.toFixed(2)}`, 87, 90);
-    }
-
-    /* Banner mốc KM trượt từ trên xuống. */
-    if (s.banner) {
-      const t = s.banner.t;
-      const slide = Math.min(1, t * 4);
-      const by = -48 + slide * 64;
-      const alpha = t > 1.8 ? Math.max(0, (2.2 - t) / 0.4) : 1;
-      ctx.save();
-      ctx.globalAlpha = alpha;
-      const grad = ctx.createLinearGradient(W / 2 - 150, by, W / 2 + 150, by);
-      grad.addColorStop(0, '#f59e0b');
-      grad.addColorStop(1, '#f97316');
-      ctx.fillStyle = grad;
-      roundRectPath(ctx, W / 2 - 150, by, 300, 38, 10);
-      ctx.fill();
-      ctx.fillStyle = '#ffffff';
-      ctx.font = '800 15px sans-serif';
-      ctx.textAlign = 'center';
-      ctx.fillText(s.banner.text, W / 2, by + 24);
-      ctx.restore();
-    }
   }, []);
 
   useEffect(() => {
@@ -1941,49 +1906,77 @@ export function RunnerGame() {
           }}
           className="block h-auto w-full cursor-pointer touch-none select-none"
         />
-        <div className="absolute top-3 left-3 flex items-center gap-2">
-          <button
-            onClick={() => setSoundOn((v) => !v)}
-            aria-label="Bật/tắt âm thanh"
-            className="flex h-9 w-9 items-center justify-center rounded-full bg-white/85 text-slate-800 shadow transition-colors hover:bg-white"
-          >
-            {soundOn ? <Volume2 className="h-4 w-4" /> : <VolumeX className="h-4 w-4" />}
-          </button>
-          {(phase === 'playing' || phase === 'paused') && (
-            <button
-              onClick={togglePause}
-              aria-label="Tạm dừng/tiếp tục"
-              className="flex h-9 w-9 items-center justify-center rounded-full bg-white/85 text-slate-800 shadow transition-colors hover:bg-white"
-            >
-              {phase === 'paused' ? <Play className="h-4 w-4" /> : <Pause className="h-4 w-4" />}
-            </button>
-          )}
+        {/* HUD bằng HTML: chữ giữ nguyên cỡ thật trên mọi màn hình, không
+            bị co nhỏ theo canvas như trước; pointer-events-none để vẫn bấm
+            nhảy được khi chạm vào khung game. */}
+        <div className="pointer-events-none absolute inset-x-0 top-0 flex items-start justify-between gap-2 p-2 sm:p-3">
+          <div className="rounded-xl bg-white/75 px-3 py-2 shadow ring-1 ring-slate-900/10 backdrop-blur-sm">
+            <p className="text-[10px] font-semibold tracking-wide text-slate-500">QUÃNG ĐƯỜNG</p>
+            <p className="text-base font-black tabular-nums text-slate-900 sm:text-lg">
+              {hud.km.toFixed(2)} KM
+            </p>
+            <p className="text-[11px] font-medium text-slate-500">Pace {hud.pace} /km</p>
+            {hud.combo > 1 && (
+              <>
+                <div className="mt-1 h-1.5 w-28 overflow-hidden rounded-full bg-slate-900/15 sm:w-32">
+                  <div
+                    className="h-full rounded-full bg-green-500"
+                    style={{ width: `${((hud.combo - 1) / 2) * 100}%` }}
+                  />
+                </div>
+                <p className="mt-0.5 text-[10px] font-bold text-green-700">
+                  COMBO ×{hud.combo.toFixed(2)}
+                </p>
+              </>
+            )}
+          </div>
+          <div className="rounded-xl bg-white/75 px-3 py-2 text-right shadow ring-1 ring-slate-900/10 backdrop-blur-sm">
+            <p className="text-[10px] font-semibold tracking-wide text-slate-500">ĐIỂM</p>
+            <p className="text-base font-black tabular-nums text-slate-900 sm:text-lg">
+              {hud.score.toLocaleString('vi-VN')}
+            </p>
+            <p className="text-[11px] font-medium text-slate-500">
+              {hud.speedKmh.toFixed(1)} km/h
+            </p>
+          </div>
         </div>
-        <div className="absolute bottom-3 right-3 flex items-center gap-3 sm:hidden">
-          <button
-            onPointerDown={(e) => {
-              e.preventDefault();
-              pressSlide();
-            }}
-            onPointerUp={() => {
-              stateRef.current.fastFall = false;
-            }}
-            aria-label="Trượt"
-            className="flex h-12 w-14 items-center justify-center rounded-xl bg-white/85 text-slate-900 shadow"
-          >
-            <ArrowDown className="h-6 w-6" />
-          </button>
-          <button
-            onPointerDown={(e) => {
-              e.preventDefault();
-              pressJump();
-            }}
-            aria-label="Nhảy"
-            className="flex h-12 w-14 items-center justify-center rounded-xl bg-white/85 text-slate-900 shadow"
-          >
-            <ArrowUp className="h-6 w-6" />
-          </button>
-        </div>
+        {hud.banner && (
+          <div className="pointer-events-none absolute inset-x-0 top-16 flex justify-center sm:top-20">
+            <span className="banner-drop rounded-full bg-gradient-to-r from-amber-500 to-orange-500 px-5 py-2 text-sm font-black text-white shadow-lg">
+              {hud.banner}
+            </span>
+          </div>
+        )}
+      </div>
+
+      {/* Nút cảm ứng trên điện thoại: đặt DƯỚI khung game thay vì đè lên
+          đường chạy (trước đây nút che mất chướng ngại lao từ bên phải tới). */}
+      <div className="mt-3 flex items-center gap-3 sm:hidden">
+        <button
+          onPointerDown={(e) => {
+            e.preventDefault();
+            pressSlide();
+          }}
+          onPointerUp={() => {
+            stateRef.current.fastFall = false;
+          }}
+          aria-label="Trượt"
+          className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-slate-900 py-3.5 text-sm font-bold text-white shadow"
+        >
+          <ArrowDown className="h-5 w-5" />
+          Trượt
+        </button>
+        <button
+          onPointerDown={(e) => {
+            e.preventDefault();
+            pressJump();
+          }}
+          aria-label="Nhảy"
+          className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-geoenv-600 py-3.5 text-sm font-bold text-white shadow"
+        >
+          <ArrowUp className="h-5 w-5" />
+          Nhảy
+        </button>
       </div>
 
       <div className="mt-4 flex flex-wrap items-center justify-between gap-4">
@@ -2024,6 +2017,13 @@ export function RunnerGame() {
               Chạy lại
             </button>
           )}
+          <button
+            onClick={() => setSoundOn((v) => !v)}
+            aria-label="Bật/tắt âm thanh"
+            className="flex h-10 w-10 items-center justify-center rounded-xl border border-slate-200 bg-white text-slate-700 transition-colors hover:border-geoenv-300 hover:text-geoenv-700"
+          >
+            {soundOn ? <Volume2 className="h-4 w-4" /> : <VolumeX className="h-4 w-4" />}
+          </button>
           <span className="hidden text-sm text-slate-500 sm:inline">
             Cách nhảy • ↓ trượt / rơi nhanh • P tạm dừng
           </span>
