@@ -176,7 +176,6 @@ export function AdminDashboard() {
     <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6 lg:px-8">
       <div className="mb-8">
         <h1 className="text-2xl font-bold text-slate-900 sm:text-3xl">Tổng quan</h1>
-        <p className="mt-1 text-sm text-slate-600">Bức tranh tổng thể sự kiện GEOENV RUN 2026</p>
       </div>
 
       {/* 2 ô thống kê — số thật từ Supabase */}
@@ -206,10 +205,6 @@ export function AdminDashboard() {
           <Trophy className="h-5 w-5 text-geoenv-600" />
           Sẵn sàng đợt cuối 28/10
         </h3>
-        <p className="mt-2 text-sm leading-relaxed text-slate-600">
-          Số liệu hồ sơ chứng nhận theo diện cấp cuối: đủ điều kiện, bị khóa, đã có
-          link giấy và chưa có link giấy.
-        </p>
         {stats.loading ? (
           <Loader2 className="mt-4 h-6 w-6 animate-spin text-geoenv-600" />
         ) : (
@@ -262,11 +257,6 @@ export function AdminDashboard() {
           <Eye className="h-5 w-5 text-geoenv-600" />
           Lượt truy cập
         </h3>
-        <p className="mt-2 text-sm leading-relaxed text-slate-600">
-          Mỗi người mỗi trang mỗi ngày tính 1 lượt (tải lại trang trong ngày không tính
-          thêm). Lượt của quản trị viên không tính vào đây. Số liệu bắt đầu đếm từ khi
-          tính năng này lên sóng, không có số của những ngày trước đó.
-        </p>
         {visitsError ? (
           <p className="mt-4 text-sm text-slate-500">
             Chưa tải được số liệu — chạy file SQL theo dõi lượt truy cập rồi tải lại trang.
@@ -315,11 +305,6 @@ export function AdminDashboard() {
           <Lock className="h-5 w-5 text-amber-600" />
           Khóa khu vực công khai
         </h3>
-        <p className="mt-2 text-sm leading-relaxed text-slate-600">
-          Khi khóa: khách chưa đăng nhập vào trang tra cứu giấy chứng nhận chỉ
-          thấy thông báo tạm khóa; quản trị viên đã đăng nhập vẫn dùng bình thường để nhập và kiểm
-          tra dữ liệu.
-        </p>
         {siteLocked === null ? (
           <p className="mt-4 text-sm text-slate-500">
             Chưa đọc được trạng thái khóa — chạy file SQL tạo bảng cài đặt rồi tải lại trang.
