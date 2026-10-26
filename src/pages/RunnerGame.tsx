@@ -48,6 +48,14 @@ type ItemKind = 'bottle' | 'medal' | 'shield' | 'booster' | 'eco' | 'crystal';
 
 export type RunnerSkin = 'geoenv' | 'cyber' | 'champion';
 
+/* Bảng màu trang phục: áo (3 nấc gradient) + ruy băng. Nút chọn skin chỉ đổi
+   màu áo/ruy băng của VĐV, không chạm gameplay hay điểm. */
+const SKIN_PALETTES: Record<RunnerSkin, { torso: [string, string, string]; ribbon: [string, string] }> = {
+  geoenv: { torso: ['#38bdf8', '#1e5fc4', '#1e3a8a'], ribbon: ['#22c55e', '#f97316'] },
+  cyber: { torso: ['#22d3ee', '#0891b2', '#164e63'], ribbon: ['#22d3ee', '#e879f9'] },
+  champion: { torso: ['#fcd34d', '#d97706', '#92400e'], ribbon: ['#f59e0b', '#ef4444'] },
+};
+
 interface ArchGate {
   x: number;
   distanceMark: number;
@@ -282,6 +290,7 @@ interface RunnerPose {
   flip: number;
   sliding: boolean;
   airborne: boolean;
+  skin: RunnerSkin;
 }
 
 function drawRunner(ctx: CanvasRenderingContext2D, p: RunnerPose) {
@@ -366,10 +375,11 @@ function drawRunner(ctx: CanvasRenderingContext2D, p: RunnerPose) {
   ctx.stroke();
 
   /* Thân: áo Bib giải chạy, gradient + sọc trắng + số Bib. */
+  const pal = SKIN_PALETTES[p.skin] ?? SKIN_PALETTES.geoenv;
   const torsoGrad = ctx.createLinearGradient(0, 14, 0, 34);
-  torsoGrad.addColorStop(0, '#38bdf8');
-  torsoGrad.addColorStop(0.55, '#1e5fc4');
-  torsoGrad.addColorStop(1, '#1e3a8a');
+  torsoGrad.addColorStop(0, pal.torso[0]);
+  torsoGrad.addColorStop(0.55, pal.torso[1]);
+  torsoGrad.addColorStop(1, pal.torso[2]);
   ctx.fillStyle = torsoGrad;
   ctx.beginPath();
   ctx.moveTo(9, 15);
@@ -443,7 +453,7 @@ function drawRunner(ctx: CanvasRenderingContext2D, p: RunnerPose) {
 
 /* Dải ruy băng sau đầu: 10 điểm nối tiếp, sóng sin theo gió, chuyển sắc
    xanh lá → cam, thuôn dần về cuối. */
-function drawRibbon(ctx: CanvasRenderingContext2D, pts: { x: number; y: number }[]) {
+function drawRibbon(ctx: CanvasRenderingContext2D, pts: { x: number; y: number }[], ribbon: [string, string]) {
   if (pts.length < 2) return;
   const left: { x: number; y: number }[] = [];
   const right: { x: number; y: number }[] = [];
@@ -453,8 +463,8 @@ function drawRibbon(ctx: CanvasRenderingContext2D, pts: { x: number; y: number }
     right.push({ x: pts[i].x, y: pts[i].y + wdt });
   }
   const grad = ctx.createLinearGradient(pts[0].x, 0, pts[pts.length - 1].x, 0);
-  grad.addColorStop(0, '#22c55e');
-  grad.addColorStop(1, '#f97316');
+  grad.addColorStop(0, ribbon[0]);
+  grad.addColorStop(1, ribbon[1]);
   ctx.fillStyle = grad;
   ctx.beginPath();
   ctx.moveTo(left[0].x, left[0].y);
@@ -1067,6 +1077,9 @@ interface GameState {
   crashed: boolean;
   fever: number;
   feverTime: number;
+  feverCount: number;
+  feverReady: boolean;
+  weatherTimer: number;
   archGates: ArchGate[];
   weatherParticles: WeatherParticle[];
 }
@@ -1150,6 +1163,9 @@ function initialState(): GameState {
     crashed: false,
     fever: 0,
     feverTime: 0,
+    feverCount: 0,
+    feverReady: true,
+    weatherTimer: 0,
     archGates: [],
     weatherParticles: [],
   };
@@ -1169,6 +1185,7 @@ interface FinalStats {
   maxSpeedKmh: number;
   maxCombo: number;
   items: number;
+  feverCount: number;
   rank: string;
   title: string;
 }
@@ -1361,6 +1378,11 @@ export function RunnerGame() {
     setSkin(newSkin);
     if (typeof window !== 'undefined') window.localStorage.setItem('geoenv-runner-skin', newSkin);
   };
+  /* Trang phục đang chọn, đọc trong vòng lặp vẽ mà không cần tạo lại loop. */
+  const skinRef = useRef<RunnerSkin>(skin);
+  useEffect(() => {
+    skinRef.current = skin;
+  }, [skin]);
   /* HUD hiển thị bằng HTML (đọc được mọi màn hình) thay vì vẽ trong canvas:
      game chỉ đồng bộ khoảng 8 lần/giây để khỏi re-render mỗi frame. */
   const [hud, setHud] = useState({
@@ -1369,6 +1391,7 @@ export function RunnerGame() {
     score: 0,
     speedKmh: 0,
     combo: 1,
+    fever: 0,
     banner: null as string | null,
   });
   const hudAccRef = useRef(0);
@@ -1407,7 +1430,7 @@ export function RunnerGame() {
     stateRef.current = initialState();
     setSaved(false);
     setFinalStats(null);
-    setHud({ km: 0, pace: '0:00', score: 0, speedKmh: 0, combo: 1, banner: null });
+    setHud({ km: 0, pace: '0:00', score: 0, speedKmh: 0, combo: 1, fever: 0, banner: null });
     soundEngine.unlock();
     soundEngine.click();
     setPhaseBoth('playing');
@@ -1542,6 +1565,7 @@ export function RunnerGame() {
       maxSpeedKmh: s.maxSpeed * 3.6,
       maxCombo: s.maxCombo,
       items: s.bottles + s.medals + s.orbs + s.crystals,
+      feverCount: s.feverCount,
       ...rankFor(finalScore),
     };
     setFinalStats(stats);
@@ -1564,6 +1588,7 @@ export function RunnerGame() {
       const dt60 = dtSec * 60;
       const isBoosted = s.boostTime > 0;
       if (s.boostTime > 0) s.boostTime -= dtSec;
+      if (s.feverTime > 0) s.feverTime -= dtSec;
       if (s.buffer > 0) s.buffer -= dtSec;
       /* Combo nguội dần nếu lâu không nhặt đồ (trước đây combo lên tới ×3
          rồi ở yên đó cả ván dù không nhặt gì thêm). */
@@ -1572,6 +1597,8 @@ export function RunnerGame() {
       } else if (s.combo > 1) {
         s.combo = Math.max(1, s.combo - 0.5 * dtSec);
       }
+      /* Combo nguội hẳn về dưới ×2 thì được kích Fever lại ở lần chạm trần sau. */
+      if (s.combo < 2) s.feverReady = true;
       s.runTime += dtSec;
 
       /* Trượt: đếm ngược thời gian trượt. */
@@ -1637,7 +1664,7 @@ export function RunnerGame() {
 
       /* Điểm (trần 100000, khớp CHECK của bảng). */
       if (s.score < MAX_SCORE) {
-        s.score = Math.min(s.score + s.speed * 0.24 * s.combo * dt60, MAX_SCORE);
+        s.score = Math.min(s.score + s.speed * 0.24 * s.combo * (s.feverTime > 0 ? 3 : 1) * dt60, MAX_SCORE);
       }
       /* scroll: quãng đường cuộn màn hình (pixel) cho parallax + sinh vật;
          distM: mét thật (tốc độ coi như m/s) cho HUD KM — trước đây KM hiển
@@ -1653,6 +1680,7 @@ export function RunnerGame() {
           soundEngine.milestone();
           burst(RUNNER_X + 18, s.y, '#f59e0b', 12, true);
           burst(RUNNER_X + 18, s.y, '#22c55e', 12, true);
+          s.archGates.push({ x: W + 40, distanceMark: km, passed: false });
         }
       }
       if (s.banner) {
@@ -1693,6 +1721,52 @@ export function RunnerGame() {
         }
         s.lastItemDist = s.scroll;
         s.nextItemGap = blocked ? 200 : s.speed * (90 + Math.random() * 80);
+      }
+
+      /* Thời tiết theo pha trời (0 bình minh, 1 ngày, 2 hoàng hôn, 3 đêm):
+         cánh hoa bay ban ngày, đom đóm bay ban đêm. Chỉ trang trí, không ảnh
+         hưởng gameplay. Cổng chào cột mốc trôi theo thế giới, chạy qua thì
+         pháo giấy + chữ nổi. */
+      {
+        const phaseIdx = Math.floor(((s.scroll / 12000) % 4 + 4) % 4);
+        const isNight = phaseIdx === 3;
+        s.weatherTimer -= dtSec;
+        if (s.weatherTimer <= 0 && s.weatherParticles.length < 40) {
+          s.weatherTimer = isNight ? 0.45 : 0.3;
+          if (isNight) {
+            s.weatherParticles.push({
+              x: Math.random() * W, y: Math.random() * (GROUND - 160) + 30,
+              vx: -6, vy: 0, r: 2.5, color: '#fef08a', kind: 'firefly',
+              rot: Math.random() * Math.PI * 2, vRot: 0,
+            });
+          } else {
+            s.weatherParticles.push({
+              x: W + 12, y: Math.random() * (GROUND - 120) + 20,
+              vx: -(26 + s.speed * 2), vy: 16, r: 4.5, color: '#f9a8d4',
+              kind: 'petal', rot: Math.random() * Math.PI * 2,
+              vRot: (Math.random() - 0.5) * 4,
+            });
+          }
+        }
+        for (const w of s.weatherParticles) {
+          w.x += w.vx * dtSec;
+          if (w.kind === 'petal') {
+            w.y += w.vy * dtSec;
+            w.rot += w.vRot * dtSec;
+          } else {
+            w.y += Math.sin(clockRef.current * 2 + w.rot) * 10 * dtSec;
+          }
+        }
+        s.weatherParticles = s.weatherParticles.filter((w) => w.x > -24 && w.y < GROUND + 8);
+        for (const g of s.archGates) {
+          g.x -= s.speed * dt60;
+          if (!g.passed && g.x + 57 <= RUNNER_X + 18) {
+            g.passed = true;
+            burst(RUNNER_X + 18, s.y, '#f59e0b', 14, true);
+            spawnText(RUNNER_X + 18, s.y - 30, g.distanceMark === 0.5 ? 'QUA CỔNG 500M!' : `QUA CỔNG ${g.distanceMark}KM!`, '#d97706');
+          }
+        }
+        s.archGates = s.archGates.filter((g) => g.x > -160);
       }
 
       /* Di chuyển thế giới + hút vật phẩm khi boost. */
@@ -1798,9 +1872,10 @@ export function RunnerGame() {
         ring.alpha -= dtSec * 2.2;
       }
       s.rings = s.rings.filter((ring) => ring.alpha > 0);
-      if (isBoosted || s.flipping) {
+      if (isBoosted || s.flipping || s.feverTime > 0) {
         s.ghostTimer += dtSec;
-        if (s.ghostTimer > 0.08) {
+        const ghostInterval = s.feverTime > 0 ? 0.04 : 0.08;
+        if (s.ghostTimer > ghostInterval) {
           s.ghostTimer = 0;
           s.ghosts.push({ x: RUNNER_X, y: s.y, pose: s.runCycle, life: 0.35 });
         }
@@ -1844,6 +1919,7 @@ export function RunnerGame() {
           score: Math.floor(s.displayScore),
           speedKmh: s.speed * 3.6,
           combo: s.combo,
+          fever: s.feverTime > 0 ? Math.ceil(s.feverTime) : 0,
           banner: s.banner ? s.banner.text : null,
         });
       }
@@ -1897,10 +1973,20 @@ export function RunnerGame() {
         item.taken = true;
         const value = ITEM_VALUE[item.kind];
         if (value > 0) {
-          s.score = Math.min(s.score + value, MAX_SCORE);
+          s.score = Math.min(s.score + value * (s.feverTime > 0 ? 3 : 1), MAX_SCORE);
           s.combo = Math.min(s.combo + 0.25, 3);
           s.comboTimer = 4;
           if (s.combo > s.maxCombo) s.maxCombo = s.combo;
+          /* Combo chạm trần ×3 (và đã nguội từ lần trước) = kích hoạt Super
+             Fever: ×3 điểm mọi nguồn trong 5 giây. */
+          if (s.combo >= 3 && s.feverTime <= 0 && s.feverReady) {
+            s.feverTime = 5;
+            s.feverCount += 1;
+            s.feverReady = false;
+            burst(RUNNER_X + 18, s.y, '#f59e0b', 16, true);
+            spawnText(RUNNER_X + 18, s.y - 30, 'SUPER FEVER ×3!', '#f59e0b');
+            soundEngine.milestone();
+          }
           soundEngine.coin();
         } else {
           soundEngine.powerup();
@@ -1965,15 +2051,38 @@ export function RunnerGame() {
 
     drawEnvironment(ctx, s.scroll, time);
 
+    /* Thời tiết: cánh hoa bay ban ngày, đom đóm bay ban đêm (sau nền, trước VĐV). */
+    for (const w of s.weatherParticles) {
+      if (w.kind === 'petal') {
+        ctx.save();
+        ctx.translate(w.x, w.y);
+        ctx.rotate(w.rot);
+        ctx.fillStyle = w.color;
+        ctx.beginPath();
+        ctx.ellipse(0, 0, w.r, w.r * 0.55, 0, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+      } else if (w.kind === 'firefly') {
+        ctx.fillStyle = 'rgba(254, 240, 138, 0.25)';
+        ctx.beginPath();
+        ctx.arc(w.x, w.y, w.r + 4, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = w.color;
+        ctx.beginPath();
+        ctx.arc(w.x, w.y, w.r, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    }
+
     for (const sm of s.skidMarks) {
       ctx.fillStyle = `rgba(15, 23, 42, ${sm.alpha * 0.5})`;
       ctx.fillRect(sm.x, GROUND - 2, 16, 3);
     }
 
-    /* Dư ảnh tốc độ (ghost) khi boost hoặc lộn vòng. */
+    /* Dư ảnh tốc độ (ghost) khi boost, lộn vòng hoặc Fever (vệt Warp vàng). */
     for (const g of s.ghosts) {
       const alpha = (g.life / 0.35) * 0.3;
-      ctx.fillStyle = `rgba(6, 182, 212, ${alpha})`;
+      ctx.fillStyle = s.feverTime > 0 ? `rgba(234, 179, 8, ${alpha})` : `rgba(6, 182, 212, ${alpha})`;
       roundRectPath(ctx, g.x + 2, g.y + 8, 32, 40, 8);
       ctx.fill();
       ctx.beginPath();
@@ -1981,8 +2090,26 @@ export function RunnerGame() {
       ctx.fill();
     }
 
-    drawRibbon(ctx, s.ribbon);
+    /* Cổng chào cột mốc: VĐV chạy xuyên qua khung cổng. */
+    for (const g of s.archGates) {
+      ctx.fillStyle = '#1e5fc4';
+      roundRectPath(ctx, g.x, GROUND - 92, 10, 92, 4);
+      ctx.fill();
+      roundRectPath(ctx, g.x + 104, GROUND - 92, 10, 92, 4);
+      ctx.fill();
+      ctx.fillStyle = '#f59e0b';
+      roundRectPath(ctx, g.x - 6, GROUND - 104, 126, 20, 6);
+      ctx.fill();
+      ctx.fillStyle = '#1e293b';
+      ctx.font = 'bold 12px sans-serif';
+      ctx.textAlign = 'center';
+      ctx.fillText(g.distanceMark === 0.5 ? '500M' : `${g.distanceMark}KM`, g.x + 57, GROUND - 89);
+      ctx.textAlign = 'left';
+    }
+
+    drawRibbon(ctx, s.ribbon, (SKIN_PALETTES[skinRef.current] ?? SKIN_PALETTES.geoenv).ribbon);
     drawRunner(ctx, {
+      skin: skinRef.current,
       top: s.y + (!s.airborne && !s.sliding ? Math.sin(s.runCycle * 2) * 1.5 : 0),
       runCycle: s.runCycle,
       lean: Math.min(0.22, s.speed * 0.012),
@@ -2013,6 +2140,18 @@ export function RunnerGame() {
       aura.addColorStop(1, 'rgba(250, 204, 21, 0)');
       ctx.fillStyle = aura;
       ellipse(ctx, RUNNER_X + 18, s.y + 25, 52, 52);
+      ctx.fill();
+    }
+    /* Hào quang Fever: vàng rực, nhấp nháy theo thời gian còn lại. */
+    if (s.feverTime > 0) {
+      const pulse = 0.3 + 0.12 * Math.sin(time * 14);
+      const aura = ctx.createRadialGradient(
+        RUNNER_X + 18, s.y + 25, 4, RUNNER_X + 18, s.y + 25, 62,
+      );
+      aura.addColorStop(0, `rgba(245, 158, 11, ${pulse})`);
+      aura.addColorStop(1, 'rgba(245, 158, 11, 0)');
+      ctx.fillStyle = aura;
+      ellipse(ctx, RUNNER_X + 18, s.y + 25, 62, 62);
       ctx.fill();
     }
 
@@ -2221,6 +2360,11 @@ export function RunnerGame() {
                   COMBO ×{hud.combo.toFixed(2)}
                 </p>
               </>
+            )}
+            {hud.fever > 0 && (
+              <p className="mt-0.5 inline-flex items-center gap-1 text-[10px] font-black text-amber-600">
+                <Flame className="h-3 w-3" /> FEVER ×3 · {hud.fever}s
+              </p>
             )}
           </div>
           <div className="rounded-xl bg-white/75 px-3 py-2 text-right shadow ring-1 ring-slate-900/10 backdrop-blur-sm">
