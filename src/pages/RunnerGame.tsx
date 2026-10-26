@@ -500,7 +500,8 @@ function drawEnvironment(
   sky.addColorStop(0, top);
   sky.addColorStop(1, horizon);
   ctx.fillStyle = sky;
-  ctx.fillRect(0, 0, W, GROUND);
+  /* Vẽ tràn mép khung để camera zoom-out/lia/rung không lộ viền. */
+  ctx.fillRect(-60, -80, W + 120, GROUND + 80);
 
   /* Mặt trời / mặt trăng + sao lấp lánh khi tối. */
   if (nightFactor < 0.9) {
@@ -646,7 +647,7 @@ function drawEnvironment(
   const strata: [number, string][] = [
     [14, '#d6b98a'],
     [28, '#94a3b8'],
-    [H - GROUND, '#475569'],
+    [H - GROUND + 80, '#475569'],
   ];
   let sy = GROUND;
   for (const [hgt, col] of strata) {
@@ -671,16 +672,16 @@ function drawEnvironment(
   trackGrad.addColorStop(0, '#c2410c');
   trackGrad.addColorStop(1, '#7c2d12');
   ctx.fillStyle = trackGrad;
-  ctx.fillRect(0, GROUND - 5, W, 5);
+  ctx.fillRect(-60, GROUND - 5, W + 120, 5);
   ctx.fillStyle = 'rgba(255, 255, 255, 0.85)';
-  for (let x = -40; x < W; x += 40) {
+  for (let x = -40; x < W + 80; x += 40) {
     const dx = x - (dist % 40);
     ctx.fillRect(dx, GROUND - 4, 18, 2);
   }
   /* Ngọn cỏ uốn cong, cong mạnh hơn khi VĐV lướt qua. */
   ctx.strokeStyle = '#16a34a';
   ctx.lineWidth = 1.5;
-  for (let x = 0; x < W; x += 14) {
+  for (let x = -60; x < W + 60; x += 14) {
     const near = Math.max(0, 1 - Math.abs(x - RUNNER_X) / 70);
     const bend = Math.sin(time * 2 + x * 0.05) * 2 + near * 5;
     ctx.beginPath();
@@ -2039,6 +2040,24 @@ export function RunnerGame() {
     const time = clockRef.current;
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
     ctx.clearRect(0, 0, W, H);
+
+    /* Lót nền trời toàn khung hình TRƯỚC khi lia camera: camera zoom-out khi
+       nhảy cao/nhanh + lia Y + rung làm lộ mép khung, mép lộ ra vẫn là màu
+       trời chứ không phải viền đen của khung chứa (bg-slate-900). */
+    {
+      const phaseFloat = (s.scroll / 12000) % 4;
+      const phaseIdx = Math.floor(phaseFloat);
+      const phaseNext = (phaseIdx + 1) % 4;
+      const rawT = phaseFloat - phaseIdx;
+      const t = rawT * rawT * (3 - 2 * rawT);
+      const top = lerpColor(SKY_PHASES[phaseIdx][0], SKY_PHASES[phaseNext][0], t);
+      const horizon = lerpColor(SKY_PHASES[phaseIdx][1], SKY_PHASES[phaseNext][1], t);
+      const base = ctx.createLinearGradient(0, 0, 0, GROUND);
+      base.addColorStop(0, top);
+      base.addColorStop(1, horizon);
+      ctx.fillStyle = base;
+      ctx.fillRect(0, 0, W, H);
+    }
 
     /* Camera: zoom + lia Y + rung giảm chấn. */
     const sh = s.trauma * s.trauma * 12;
