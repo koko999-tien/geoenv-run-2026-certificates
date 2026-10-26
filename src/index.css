@@ -202,3 +202,17 @@ button:focus-visible {
   outline: 2px solid #1e5fc4;
   outline-offset: 2px;
 }
+
+/* Combo pop trên HUD game: phóng to + chuyển vàng mỗi lần combo tăng.
+   Chỉ chạy khi người dùng không bật giảm chuyển động. */
+@media (prefers-reduced-motion: no-preference) {
+  .combo-pop {
+    display: inline-block;
+    animation: combo-pop 0.35s ease-out;
+  }
+  @keyframes combo-pop {
+    0% { transform: scale(1); color: #15803d; }
+    30% { transform: scale(1.45); color: #eab308; }
+    100% { transform: scale(1); color: #15803d; }
+  }
+}

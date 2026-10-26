@@ -1861,6 +1861,15 @@ export function RunnerGame() {
   /* Bước chạy gần nhất (vòng sóng tiếp đất) + nhịp hạt ruy băng. */
   const stepRef = useRef(0);
   const sparkleAccRef = useRef(0);
+  /* Hit Stop: số giây còn đứng hình sau va chạm mạnh. */
+  const hitStopRef = useRef(0);
+  /* Combo pop trên HUD: tăng key để animation chạy lại mỗi lần combo tăng. */
+  const [comboPopKey, setComboPopKey] = useState(0);
+  const prevComboRef = useRef(1);
+  useEffect(() => {
+    if (hud.combo > prevComboRef.current) setComboPopKey((k) => k + 1);
+    prevComboRef.current = hud.combo;
+  }, [hud.combo]);
 
   useEffect(() => {
     soundEngine.enabled = soundOn;
@@ -2129,7 +2138,10 @@ export function RunnerGame() {
 
       /* Tốc độ: tăng theo điểm, boost ×1.35, vũng nước ×0.7, trần 15.5. */
       if (s.slowTime > 0) s.slowTime -= dtSec;
-      const baseSpeed = Math.min(4.8 + s.score * 0.0028, 15.5);
+      /* Đường cong tốc độ parabol: đầu chậm để người mới kịp thích nghi,
+         giữa tăng nhanh dần, chặn trần ở 15.5 (t = điểm / 3800). */
+      const speedT = Math.min(s.score / 3800, 1);
+      const baseSpeed = 4.8 + (15.5 - 4.8) * speedT * speedT;
       const slowFactor = s.slowTime > 0 ? 0.7 : 1;
       s.speed = baseSpeed * (isBoosted ? 1.35 : 1) * slowFactor;
       if (s.speed > s.maxSpeed) s.maxSpeed = s.speed;
@@ -2445,10 +2457,12 @@ export function RunnerGame() {
           s.comboTimer = 0;
           s.obstacles = s.obstacles.filter((o) => o !== ob);
           s.trauma = 0.6;
+          hitStopRef.current = 0.05;
           soundEngine.shieldBreak();
           spawnText(RUNNER_X + 18, s.y - 10, 'KHIÊN VỠ!', '#f59e0b');
           s.rings.push({ x: RUNNER_X + 18, y: s.y + 25, r: 10, maxR: 46, alpha: 0.6 });
         } else {
+          hitStopRef.current = 0.06;
           finishRun();
           return;
         }
@@ -2791,8 +2805,14 @@ export function RunnerGame() {
         ? Math.min((now - lastTimeRef.current) / 1000, 0.05)
         : 0.016;
       lastTimeRef.current = now;
-      if (phaseRef.current === 'playing') updateGame(dt);
-      if (phaseRef.current !== 'paused') clockRef.current += dt;
+      /* Hit Stop: va chạm mạnh làm đứng hình một nhịp ngắn (khung hình vẫn
+         vẽ, chỉ không cập nhật logic + đồng hồ) rồi mới chạy tiếp. */
+      if (hitStopRef.current > 0) {
+        hitStopRef.current -= dt;
+      } else {
+        if (phaseRef.current === 'playing') updateGame(dt);
+        if (phaseRef.current !== 'paused') clockRef.current += dt;
+      }
       drawScene();
       /* Ghép khung hình cuối: qua shader WebGL nếu có, không thì vẽ thẳng
          canvas phụ lên canvas hiển thị (máy cũ không có WebGL vẫn chơi được). */
@@ -2927,7 +2947,7 @@ export function RunnerGame() {
                     style={{ width: `${((hud.combo - 1) / 2) * 100}%` }}
                   />
                 </div>
-                <p className="mt-0.5 text-[10px] font-bold text-green-700">
+                <p key={comboPopKey} className="combo-pop mt-0.5 text-[10px] font-bold text-green-700">
                   COMBO ×{hud.combo.toFixed(2)}
                 </p>
               </>
