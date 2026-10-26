@@ -813,10 +813,6 @@ export function CertificateLookup() {
       {/* Tìm theo đội — 1 người tra 1 lần là tải được giấy của cả đội */}
       <div className="card mt-6 rounded-3xl p-5 shadow-lg sm:p-7">
         <h2 className="text-lg font-bold text-slate-900">Tìm theo đội</h2>
-        <p className="mt-1 text-sm leading-relaxed text-slate-600">
-          Gõ số đội (vd: 06) hoặc vài chữ đầu tên đội — gợi ý hiện ngay như ô tên bên trên.
-          Một người tra là tải được giấy của cả đội, mỗi thành viên 1 nút tải riêng.
-        </p>
         <form onSubmit={handleTeamSearch} className="relative mt-4">
           <div className="space-y-2">
             <label htmlFor="teamName" className="block text-sm font-medium text-slate-700">
