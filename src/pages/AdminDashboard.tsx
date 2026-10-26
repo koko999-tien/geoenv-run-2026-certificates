@@ -27,6 +27,9 @@ const PAGE_NAMES: Record<string, string> = {
   '/': 'Trang chủ',
   '/tra-cuu': 'Tra cứu giấy chứng nhận',
   '/gop-y': 'Góp ý & phản ánh',
+  '/minigame': 'Minigame',
+  '/nop-ket-qua': 'Nộp kết quả chạy',
+  '/kiem-tra': 'Kiểm tra (dữ liệu thử)',
 };
 
 export function AdminDashboard() {
