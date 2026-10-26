@@ -9,9 +9,13 @@ import {
   Loader2,
   Lock,
   LockOpen,
+  Download,
+  Pencil,
+  UserPlus,
 } from 'lucide-react';
 import { Button } from '../components/Button';
 import { supabase } from '../lib/supabase';
+import { TEAMS, findTeam, teamLabel } from '../data/teamMap';
 import * as XLSX from 'xlsx';
 
 interface CertificateRow {
@@ -79,6 +83,14 @@ function parseCsv(text: string): string[][] {
   rows.push(row);
   return rows.filter((r) => r.some((c) => c.trim() !== ''));
 }
+
+/* Lý do khóa gõ nhanh — bấm 1 cái là điền vào ô lý do, sửa lại được trước khi khóa */
+const QUICK_REASONS = [
+  'Không đến tham gia',
+  'Đội không hoàn thành',
+  'Vi phạm quy định giải chạy',
+  'Thông tin đăng ký không khớp',
+];
 
 const NAME_HEADERS = ['họ tên', 'họ và tên', 'tên', 'full_name', 'fullname', 'họ tên sv', 'sinh viên'];
 const CLASS_HEADERS = ['lớp', 'class_name', 'classname', 'lớp học'];
@@ -218,6 +230,28 @@ export function AdminCertificates() {
     row: CertificateRow;
   } | null>(null);
   const lockBoxRef = useRef<HTMLDivElement>(null);
+  const addBoxRef = useRef<HTMLDivElement>(null);
+
+  /* Lọc theo đội: tra theo số đội hoặc tên đội trong danh sách chốt 81 đội.
+     Người thêm tay (vd BTC) không thuộc đội nào nên rơi vào mục "chưa rõ đội". */
+  const [teamFilter, setTeamFilter] = useState('all');
+
+  /* Thêm người mới thủ công (vd người BTC không có trong danh sách đăng ký) */
+  const [showAdd, setShowAdd] = useState(false);
+  const [addName, setAddName] = useState('');
+  const [addClass, setAddClass] = useState('');
+  const [addLink, setAddLink] = useState('');
+  const [adding, setAdding] = useState(false);
+  const [addResult, setAddResult] = useState('');
+  const [addError, setAddError] = useState('');
+
+  /* Sửa tên/lớp ngay trong bảng — bấm Sửa ở dòng nào thì dòng đó thành ô nhập */
+  const [editing, setEditing] = useState<{
+    id: string;
+    fullName: string;
+    className: string;
+  } | null>(null);
+  const [savingEdit, setSavingEdit] = useState(false);
 
   /* Bảng có 402 dòng nên hộp khóa nằm tít cuối trang — bấm nút là tự cuộn tới hộp,
      không thì trông như bấm mà không có gì xảy ra */
@@ -226,6 +260,13 @@ export function AdminCertificates() {
       lockBoxRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
   }, [lockingRow]);
+
+  /* Mở khung thêm người mới thì cuộn tới khung để khỏi phải mò */
+  useEffect(() => {
+    if (showAdd) {
+      addBoxRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  }, [showAdd]);
 
   useEffect(() => {
     fetchCertificates();
@@ -416,11 +457,110 @@ export function AdminCertificates() {
     }
   };
 
-  /* Lọc theo ô tìm + trạng thái, rồi chia trang — bảng 400+ dòng không còn phải lướt hết */
+  /* Thêm người mới thủ công — kiểm tra trùng tên + lớp trước khi thêm */
+  const handleAdd = async () => {
+    const fullName = clean(addName);
+    const className = clean(addClass);
+    const link = addLink.trim();
+    if (!fullName || !className) {
+      setAddError('Vui lòng nhập đủ họ tên và lớp.');
+      return;
+    }
+    const dup = rows.some(
+      (r) => norm(r.full_name) === norm(fullName) && norm(r.class_name) === norm(className),
+    );
+    if (dup) {
+      setAddError('Người này đã có trong hệ thống rồi — không thêm trùng.');
+      return;
+    }
+    setAdding(true);
+    setAddError('');
+    setAddResult('');
+    try {
+      const { error } = await supabase.from('certificate_records').insert({
+        full_name: fullName,
+        class_name: className,
+        certificate_url: link || null,
+        is_eligible: true,
+      });
+      if (error) throw error;
+      setAddResult(`Đã thêm ${fullName} • Lớp ${className} vào hệ thống.`);
+      setAddName('');
+      setAddClass('');
+      setAddLink('');
+      await fetchCertificates();
+    } catch (e) {
+      setAddError(`Không thêm được: ${supaMsg(e)}`);
+    } finally {
+      setAdding(false);
+    }
+  };
+
+  /* Lưu tên/lớp đã sửa ngay trong bảng — chỉ gọn khoảng trắng, không đổi câu chữ */
+  const handleSaveEdit = async () => {
+    if (!editing) return;
+    const fullName = clean(editing.fullName);
+    const className = clean(editing.className);
+    if (!fullName || !className) {
+      alert('Vui lòng nhập đủ họ tên và lớp.');
+      return;
+    }
+    setSavingEdit(true);
+    try {
+      const { error } = await supabase
+        .from('certificate_records')
+        .update({ full_name: fullName, class_name: className })
+        .eq('id', editing.id);
+      if (error) throw error;
+      setEditing(null);
+      await fetchCertificates();
+    } catch (e) {
+      alert(`Không lưu được: ${supaMsg(e)}`);
+    } finally {
+      setSavingEdit(false);
+    }
+  };
+
+  /* Xuất đúng danh sách đang lọc ra Excel — chỉ xuất trạng thái link (Đã có/Chưa có),
+     không xuất link thật để file có chuyển tay người khác cũng không lộ hết link */
+  const handleExport = () => {
+    const data = visibleRows.map((r, i) => {
+      const t = findTeam(r.full_name, r.class_name);
+      return {
+        STT: i + 1,
+        'Họ tên': r.full_name,
+        Lớp: r.class_name,
+        Đội: t ? teamLabel(t) : '',
+        'Điều kiện': r.is_eligible ? 'Đủ điều kiện' : 'Bị khóa',
+        'Lý do khóa': r.is_eligible ? '' : (r.violation_reason ?? ''),
+        'Link GCN': r.certificate_url ? 'Đã có' : 'Chưa có',
+      };
+    });
+    const ws = XLSX.utils.json_to_sheet(data);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Chung nhan');
+    XLSX.writeFile(wb, 'danh-sach-chung-nhan.xlsx');
+  };
+
+  /* Lọc theo ô tìm + đội + trạng thái, rồi chia trang — bảng 400+ dòng không còn
+     phải lướt hết. Ô tìm khớp cả họ tên, lớp và tên/số đội trong danh sách chốt. */
   const visibleRows = rows.filter((r) => {
     const q = strip(search);
+    const team = findTeam(r.full_name, r.class_name);
     const matchSearch =
-      !q || strip(r.full_name).includes(q) || strip(r.class_name).includes(q);
+      !q ||
+      strip(r.full_name).includes(q) ||
+      strip(r.class_name).includes(q) ||
+      (team !== null &&
+        (strip(team.name).includes(q) ||
+          team.num === q ||
+          String(Number(team.num)) === q));
+    const matchTeam =
+      teamFilter === 'all'
+        ? true
+        : teamFilter === 'unknown'
+          ? team === null
+          : team?.num === teamFilter;
     const matchView = view === 'violations' ? !r.is_eligible : true;
     const matchStatus =
       statusFilter === 'all'
@@ -428,7 +568,7 @@ export function AdminCertificates() {
         : statusFilter === 'hasLink'
           ? !!r.certificate_url
           : !r.certificate_url;
-    return matchSearch && matchView && matchStatus;
+    return matchSearch && matchTeam && matchView && matchStatus;
   });
   const pageCount = Math.max(1, Math.ceil(visibleRows.length / pageSize));
   const safePage = Math.min(page, pageCount);
@@ -441,10 +581,88 @@ export function AdminCertificates() {
           <h1 className="text-xl font-bold text-slate-900 sm:text-2xl">Quản lý chứng nhận</h1>
           <p className="mt-1 text-sm text-slate-600">Danh sách người nhận giấy chứng nhận</p>
         </div>
-        <Button variant="primary" onClick={() => setShowImport(!showImport)} className="text-sm">
-          <Upload className="h-4 w-4" /> Nhập Excel
-        </Button>
+        <div className="flex flex-wrap gap-2">
+          <Button variant="outline" onClick={() => setShowAdd(!showAdd)} className="text-sm">
+            <UserPlus className="h-4 w-4" /> Thêm người mới
+          </Button>
+          <Button variant="outline" onClick={handleExport} className="text-sm">
+            <Download className="h-4 w-4" /> Xuất Excel ({visibleRows.length})
+          </Button>
+          <Button variant="primary" onClick={() => setShowImport(!showImport)} className="text-sm">
+            <Upload className="h-4 w-4" /> Nhập Excel
+          </Button>
+        </div>
       </div>
+
+      {/* Khung thêm người mới thủ công — vd người BTC không có trong danh sách đăng ký */}
+      {showAdd && (
+        <div ref={addBoxRef} className="card mb-6 p-4 sm:p-6">
+          <h3 className="text-lg font-bold text-slate-900">Thêm người mới</h3>
+          <p className="mt-1 text-sm text-slate-600">
+            Dùng khi cần thêm người ngoài danh sách đăng ký (ví dụ người BTC làm giấy). Người
+            thêm tay chưa thuộc đội nào trong danh sách chốt nên lọc theo đội sẽ không thấy —
+            tìm theo tên vẫn thấy bình thường.
+          </p>
+          <div className="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
+            <label className="text-sm font-medium text-slate-700">
+              Họ tên <span className="text-red-500">*</span>
+              <input
+                type="text"
+                className="input-field mt-1"
+                placeholder="VD: Nguyễn Văn A"
+                value={addName}
+                onChange={(e) => setAddName(e.target.value)}
+              />
+            </label>
+            <label className="text-sm font-medium text-slate-700">
+              Lớp <span className="text-red-500">*</span>
+              <input
+                type="text"
+                className="input-field mt-1"
+                placeholder="VD: Quản lý tài nguyên và môi trường K71A"
+                value={addClass}
+                onChange={(e) => setAddClass(e.target.value)}
+              />
+            </label>
+            <label className="text-sm font-medium text-slate-700">
+              Link GCN <span className="font-normal text-slate-400">(không bắt buộc)</span>
+              <input
+                type="text"
+                className="input-field mt-1"
+                placeholder="Dán link giấy nếu đã có"
+                value={addLink}
+                onChange={(e) => setAddLink(e.target.value)}
+              />
+            </label>
+          </div>
+          {addError && (
+            <div className="mt-4 flex items-start gap-2.5 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+              <p>{addError}</p>
+            </div>
+          )}
+          {addResult && (
+            <div className="mt-4 rounded-xl border border-emerald-200 bg-emerald-50 p-3 text-sm text-emerald-800">
+              {addResult}
+            </div>
+          )}
+          <div className="mt-4 flex flex-wrap gap-3">
+            <Button variant="primary" onClick={handleAdd} disabled={adding}>
+              {adding ? 'Đang thêm...' : 'Thêm vào hệ thống'}
+            </Button>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setShowAdd(false);
+                setAddError('');
+                setAddResult('');
+              }}
+            >
+              Đóng
+            </Button>
+          </div>
+        </div>
+      )}
 
       {/* Banner: chưa có cột lý do vi phạm */}
       {needsReasonColumn && (
@@ -460,14 +678,14 @@ export function AdminCertificates() {
         </div>
       )}
 
-      {/* Ô tìm kiếm + lọc trạng thái + cỡ trang */}
+      {/* Ô tìm kiếm + lọc đội + lọc trạng thái + cỡ trang */}
       <div className="mb-6 flex flex-col gap-3 sm:flex-row">
         <div className="relative flex-1">
           <Search className="absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
           <input
             type="text"
             className="input-field pl-11"
-            placeholder="Tìm theo họ tên hoặc lớp (gõ không dấu cũng được)..."
+            placeholder="Tìm theo họ tên, lớp hoặc đội (gõ không dấu cũng được)..."
             value={search}
             onChange={(e) => {
               setSearch(e.target.value);
@@ -475,6 +693,22 @@ export function AdminCertificates() {
             }}
           />
         </div>
+        <select
+          value={teamFilter}
+          onChange={(e) => {
+            setTeamFilter(e.target.value);
+            setPage(1);
+          }}
+          className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm"
+        >
+          <option value="all">Đội: tất cả</option>
+          {TEAMS.map((t) => (
+            <option key={t.num} value={t.num}>
+              {teamLabel(t)}
+            </option>
+          ))}
+          <option value="unknown">Đội: chưa rõ (thêm tay)</option>
+        </select>
         <select
           value={statusFilter}
           onChange={(e) => {
@@ -547,12 +781,13 @@ export function AdminCertificates() {
       ) : (
         <div className="card overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[760px] text-left">
+            <table className="w-full min-w-[880px] text-left">
               <thead>
                 <tr className="border-b border-slate-200 bg-slate-50">
                   <th className="px-5 py-3.5 text-[11px] font-semibold uppercase tracking-wider text-slate-500">STT</th>
                   <th className="px-5 py-3.5 text-[11px] font-semibold uppercase tracking-wider text-slate-500">Họ tên</th>
                   <th className="px-5 py-3.5 text-[11px] font-semibold uppercase tracking-wider text-slate-500">Lớp</th>
+                  <th className="px-5 py-3.5 text-[11px] font-semibold uppercase tracking-wider text-slate-500">Đội</th>
                   <th className="px-5 py-3.5 text-[11px] font-semibold uppercase tracking-wider text-slate-500">Điều kiện</th>
                   <th className="px-5 py-3.5 text-[11px] font-semibold uppercase tracking-wider text-slate-500">Link GCN</th>
                   <th className="px-5 py-3.5 text-[11px] font-semibold uppercase tracking-wider text-slate-500">Ngày tạo</th>
@@ -560,7 +795,10 @@ export function AdminCertificates() {
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {pageRows.map((row, index) => (
+                {pageRows.map((row, index) => {
+                  const isEditing = editing?.id === row.id;
+                  const team = findTeam(row.full_name, row.class_name);
+                  return (
                   <tr
                     key={row.id}
                     className={`transition-colors ${
@@ -572,8 +810,37 @@ export function AdminCertificates() {
                     <td className="px-5 py-4 text-sm text-slate-400">
                       {(safePage - 1) * pageSize + index + 1}
                     </td>
-                    <td className="px-5 py-4 text-sm font-medium text-slate-900">{row.full_name}</td>
-                    <td className="px-5 py-4 text-sm text-slate-600">{row.class_name}</td>
+                    <td className="px-5 py-4 text-sm font-medium text-slate-900">
+                      {isEditing ? (
+                        <input
+                          type="text"
+                          className="w-full rounded-lg border border-slate-300 px-2 py-1.5 text-sm"
+                          value={editing.fullName}
+                          onChange={(e) =>
+                            setEditing({ ...editing, fullName: e.target.value })
+                          }
+                        />
+                      ) : (
+                        row.full_name
+                      )}
+                    </td>
+                    <td className="px-5 py-4 text-sm text-slate-600">
+                      {isEditing ? (
+                        <input
+                          type="text"
+                          className="w-full rounded-lg border border-slate-300 px-2 py-1.5 text-sm"
+                          value={editing.className}
+                          onChange={(e) =>
+                            setEditing({ ...editing, className: e.target.value })
+                          }
+                        />
+                      ) : (
+                        row.class_name
+                      )}
+                    </td>
+                    <td className="px-5 py-4 text-sm text-slate-600">
+                      {team ? teamLabel(team) : '—'}
+                    </td>
                     <td className="px-5 py-4">
                       {row.is_eligible ? (
                         <span className="inline-flex items-center gap-1.5 rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-700 ring-1 ring-emerald-200">
@@ -605,38 +872,69 @@ export function AdminCertificates() {
                       {new Date(row.created_at).toLocaleDateString('vi-VN')}
                     </td>
                     <td className="px-5 py-4">
-                      <div className="flex flex-wrap gap-2">
-                        {row.is_eligible ? (
+                      {isEditing ? (
+                        <div className="flex flex-wrap gap-2">
                           <button
-                            onClick={() => {
-                              setLockingRow(row);
-                              setLockReason('');
-                            }}
+                            onClick={handleSaveEdit}
+                            disabled={savingEdit}
+                            className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium text-white bg-geoenv-600 transition-colors hover:bg-geoenv-700 disabled:opacity-60"
+                          >
+                            <Check className="h-3.5 w-3.5" /> {savingEdit ? 'Đang lưu...' : 'Lưu'}
+                          </button>
+                          <button
+                            onClick={() => setEditing(null)}
+                            className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium text-slate-600 ring-1 ring-slate-200 transition-colors hover:bg-slate-50"
+                          >
+                            Hủy
+                          </button>
+                        </div>
+                      ) : (
+                        <div className="flex flex-wrap gap-2">
+                          <button
+                            onClick={() =>
+                              setEditing({
+                                id: row.id,
+                                fullName: row.full_name,
+                                className: row.class_name,
+                              })
+                            }
+                            className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium text-geoenv-700 ring-1 ring-geoenv-200 transition-colors hover:bg-geoenv-50"
+                          >
+                            <Pencil className="h-3.5 w-3.5" /> Sửa
+                          </button>
+                          {row.is_eligible ? (
+                            <button
+                              onClick={() => {
+                                setLockingRow(row);
+                                setLockReason('');
+                              }}
+                              className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium text-red-600 ring-1 ring-red-200 transition-colors hover:bg-red-50"
+                            >
+                              <Lock className="h-3.5 w-3.5" /> Đánh dấu vi phạm
+                            </button>
+                          ) : (
+                            <button
+                              onClick={() => setConfirmAction({ type: 'unlock', row })}
+                              className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium text-emerald-700 ring-1 ring-emerald-200 transition-colors hover:bg-emerald-50"
+                            >
+                              <LockOpen className="h-3.5 w-3.5" /> Mở khóa
+                            </button>
+                          )}
+                          <button
+                            onClick={() => setConfirmAction({ type: 'delete', row })}
                             className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium text-red-600 ring-1 ring-red-200 transition-colors hover:bg-red-50"
                           >
-                            <Lock className="h-3.5 w-3.5" /> Đánh dấu vi phạm
+                            <Trash2 className="h-3.5 w-3.5" /> Xóa
                           </button>
-                        ) : (
-                          <button
-                            onClick={() => setConfirmAction({ type: 'unlock', row })}
-                            className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium text-emerald-700 ring-1 ring-emerald-200 transition-colors hover:bg-emerald-50"
-                          >
-                            <LockOpen className="h-3.5 w-3.5" /> Mở khóa
-                          </button>
-                        )}
-                        <button
-                          onClick={() => setConfirmAction({ type: 'delete', row })}
-                          className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium text-red-600 ring-1 ring-red-200 transition-colors hover:bg-red-50"
-                        >
-                          <Trash2 className="h-3.5 w-3.5" /> Xóa
-                        </button>
-                      </div>
+                        </div>
+                      )}
                     </td>
                   </tr>
-                ))}
+                  );
+                })}
                 {rows.length === 0 && (
                   <tr>
-                    <td colSpan={7} className="px-5 py-12 text-center">
+                    <td colSpan={8} className="px-5 py-12 text-center">
                       <p className="text-sm font-medium text-slate-700">Chưa có dữ liệu chứng nhận</p>
                       <p className="mt-1 text-xs text-slate-500">
                         Bấm "Nhập Excel" phía trên để nhập danh sách từ file.
@@ -646,7 +944,7 @@ export function AdminCertificates() {
                 )}
                 {rows.length > 0 && visibleRows.length === 0 && (
                   <tr>
-                    <td colSpan={7} className="px-5 py-12 text-center text-sm text-slate-500">
+                    <td colSpan={8} className="px-5 py-12 text-center text-sm text-slate-500">
                       {view === 'violations' && !search
                         ? 'Chưa có hồ sơ vi phạm nào.'
                         : `Không tìm thấy kết quả khớp với "${search}"`}
@@ -713,12 +1011,40 @@ export function AdminCertificates() {
             Sau khi khóa, vận động viên này vào tra cứu sẽ thấy tải bị khóa kèm lý do bên dưới và
             email liên hệ BTC. Muốn mở lại thì bấm "Mở khóa" ở bảng.
           </p>
+          <p className="mt-4 text-sm font-medium text-slate-700">
+            Lý do có sẵn — bấm để điền nhanh, sửa lại được trước khi khóa:
+          </p>
+          <div className="mt-2 flex flex-wrap gap-2">
+            {QUICK_REASONS.map((reason) => (
+              <button
+                key={reason}
+                type="button"
+                onClick={() => setLockReason(reason)}
+                className="rounded-full px-3 py-1.5 text-xs font-medium text-red-700 ring-1 ring-red-200 transition-colors hover:bg-red-50"
+              >
+                {reason}
+              </button>
+            ))}
+          </div>
           <textarea
-            className="input-field mt-4 min-h-[80px]"
+            className="input-field mt-3 min-h-[80px]"
             placeholder="VD: Chạy sai cự ly quy định, gian lận kết quả Strava..."
             value={lockReason}
             onChange={(e) => setLockReason(e.target.value)}
           />
+          {/* Xem trước đúng cái thẻ vận động viên sẽ thấy khi tra cứu */}
+          <div className="mt-4 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-800">
+            <p className="font-semibold">Vận động viên sẽ thấy như này khi tra cứu:</p>
+            <p className="mt-2 font-semibold">Giấy chứng nhận của bạn đã bị khóa.</p>
+            <p className="mt-1">
+              <span className="font-semibold">Lý do: </span>
+              {lockReason.trim() || '(chưa nhập lý do)'}
+            </p>
+            <p className="mt-1">
+              Mọi thắc mắc vui lòng liên hệ Ban tổ chức qua email{' '}
+              <span className="font-semibold underline">geoenvrun@gmail.com</span>.
+            </p>
+          </div>
           <div className="mt-4 flex flex-wrap gap-3">
             <Button variant="primary" onClick={handleLock} disabled={locking}>
               {locking ? 'Đang khóa...' : 'Xác nhận khóa'}

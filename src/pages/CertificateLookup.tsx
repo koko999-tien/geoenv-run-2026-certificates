@@ -7,6 +7,8 @@ import { supabase } from '../lib/supabase';
 import { usePublicLock } from '../lib/siteLock';
 import { PublicLockNotice } from '../components/PublicLockNotice';
 import { OFFICIAL_MAJORS } from '../data/majors';
+import { teamLabel, matchTeams, resolveTeam, findTeam } from '../data/teamMap';
+import type { TeamInfo } from '../data/teamMap';
 
 interface SearchResult {
   found: boolean;
@@ -138,6 +140,14 @@ interface Candidate {
   className: string;
 }
 
+/* 1 thành viên trong kết quả tìm theo đội: có thể chưa có hồ sơ trong hệ thống */
+interface TeamMemberResult {
+  order: number;
+  fullName: string;
+  className: string;
+  row: Record<string, any> | null;
+}
+
 export function CertificateLookup() {
   const [form, setForm] = useState({ fullName: '', className: '' });
   const [result, setResult] = useState<SearchResult | null>(null);
@@ -156,6 +166,21 @@ export function CertificateLookup() {
   const [nameSuggestActive, setNameSuggestActive] = useState(0);
   /* Cổng khóa khu vực công khai: khách thấy thông báo tạm khóa, admin đã đăng nhập vẫn dùng */
   const lock = usePublicLock();
+
+  /* Tìm theo đội: gõ vài chữ đầu là gợi ý tên đội như ô tên/lớp; 1 người tra
+     là tải được giấy của cả đội (mỗi thành viên 1 nút tải riêng) */
+  const [teamQuery, setTeamQuery] = useState('');
+  const [teamSuggestOpen, setTeamSuggestOpen] = useState(false);
+  const [teamSuggestItems, setTeamSuggestItems] = useState<TeamInfo[]>([]);
+  const [teamSuggestActive, setTeamSuggestActive] = useState(0);
+  const [pickedTeam, setPickedTeam] = useState<TeamInfo | null>(null);
+  const [teamHeader, setTeamHeader] = useState<TeamInfo | null>(null);
+  const [teamMembers, setTeamMembers] = useState<TeamMemberResult[] | null>(null);
+  const [teamMessage, setTeamMessage] = useState<string | null>(null);
+  const [teamError, setTeamError] = useState<string | null>(null);
+  const [teamLoading, setTeamLoading] = useState(false);
+  /* Ghi chú từng thành viên khi bấm tải (vd đang lấy link, hoặc BTC đang gắn link) */
+  const [teamLinkNote, setTeamLinkNote] = useState<Record<string, string>>({});
 
   /* Tải danh sách (dùng chung bộ nhớ đệm với nút tìm) để gợi ý không cần bấm tìm.
      BẢO MẬT: danh sách này KHÔNG kèm link giấy chứng nhận — link chỉ lấy riêng
@@ -449,6 +474,106 @@ export function CertificateLookup() {
     }
   };
 
+  /* Gợi ý đội: gõ số đội ("06", "6") hoặc chữ cái đầu tên đội ("sieu" -> SIÊU LỐP) */
+  const updateTeamSuggestions = (typed: string) => {
+    const items = matchTeams(typed);
+    setTeamSuggestItems(items);
+    setTeamSuggestActive(0);
+    setTeamSuggestOpen(items.length > 0);
+  };
+
+  const pickTeamSuggestion = (t: TeamInfo) => {
+    setPickedTeam(t);
+    setTeamQuery(teamLabel(t));
+    setTeamSuggestOpen(false);
+  };
+
+  /* Tìm đội rồi ghép thành viên trong danh sách chốt với hồ sơ trong hệ thống.
+     BẢO MẬT như tìm theo tên: danh sách không kèm link, link từng người chỉ lấy
+     riêng khi bấm nút tải của đúng người đó. */
+  const handleTeamSearch = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setTeamLoading(true);
+    setTeamError(null);
+    setTeamMembers(null);
+    setTeamHeader(null);
+    setTeamMessage(null);
+    setTeamSuggestOpen(false);
+    try {
+      let team = pickedTeam;
+      if (!team || teamQuery !== teamLabel(team)) {
+        team = resolveTeam(teamQuery);
+      }
+      if (!team) {
+        const cands = matchTeams(teamQuery);
+        setTeamMessage(
+          cands.length > 1
+            ? 'Có nhiều đội khớp với chữ bạn gõ — chọn đúng đội trong gợi ý nhé.'
+            : 'Không tìm thấy đội nào khớp. Thử gõ số đội (vd: 06) hoặc vài chữ đầu tên đội.',
+        );
+        setTeamLoading(false);
+        return;
+      }
+      setPickedTeam(team);
+      const all = await ensureRows();
+      const flatKey = (n: string, c: string) =>
+        `${strip(n).replace(/\s+/g, '')}|${strip(c).replace(/\s+/g, '')}`;
+      const rowByKey = new Map(
+        all.map((r) => [flatKey(String(r.full_name ?? ''), String(r.class_name ?? '')), r]),
+      );
+      const members: TeamMemberResult[] = team.members.map((m) => ({
+        order: m.order,
+        fullName: m.name,
+        className: m.className,
+        row: rowByKey.get(flatKey(m.name, m.className)) ?? null,
+      }));
+      /* Hồ sơ trong hệ thống thuộc đội này nhưng lệch tên so với danh sách chốt:
+         vẫn hiện thêm ở cuối để không sót người */
+      const seen = new Set(members.map((m) => flatKey(m.fullName, m.className)));
+      for (const r of all) {
+        if (findTeam(String(r.full_name ?? ''), String(r.class_name ?? ''))?.num === team.num) {
+          const k = flatKey(String(r.full_name ?? ''), String(r.class_name ?? ''));
+          if (!seen.has(k)) {
+            seen.add(k);
+            members.push({
+              order: 99,
+              fullName: String(r.full_name ?? ''),
+              className: String(r.class_name ?? ''),
+              row: r,
+            });
+          }
+        }
+      }
+      setTeamHeader(team);
+      setTeamMembers(members);
+    } catch {
+      setTeamError('Có lỗi xảy ra khi tìm đội. Vui lòng thử lại sau.');
+    } finally {
+      setTeamLoading(false);
+    }
+  };
+
+  /* Tải giấy của 1 thành viên trong đội — link chỉ lấy riêng cho người đó */
+  const handleTeamDownload = async (m: TeamMemberResult) => {
+    if (!m.row) return;
+    const key = `${m.fullName}|${m.className}`;
+    setTeamLinkNote((n) => ({ ...n, [key]: 'Đang lấy link...' }));
+    try {
+      const url = await fetchCertUrl(m.row.id);
+      if (url) {
+        setTeamLinkNote((n) => ({ ...n, [key]: '' }));
+        window.open(url, '_blank', 'noopener');
+      } else {
+        setTeamLinkNote((n) => ({
+          ...n,
+          [key]: 'Giấy của bạn này BTC đang gắn link — quay lại sau ít phút nhé!',
+        }));
+      }
+    } catch {
+      setTeamLinkNote((n) => ({ ...n, [key]: 'Không lấy được link, thử lại sau nhé.' }));
+    }
+  };
+
   /* Mở link giấy chứng nhận ở tab mới — tương thích mọi loại link */
   const handleOpenCertificate = () => {
     if (!result?.certificateUrl) return;
@@ -478,6 +603,7 @@ export function CertificateLookup() {
     'Gõ tên không cần dấu cũng được (ví dụ: "nguyen van a").',
     'Lớp nên gõ tên đầy đủ (ví dụ: "Quản lý tài nguyên và môi trường K71A").',
     'Nhập đúng họ tên đầy đủ như khi đăng ký (có chữ đệm).',
+    'Muốn tải cho cả đội thì dùng ô tìm theo đội phía trên.',
     'Vẫn không thấy? Liên hệ BTC qua thông tin ở cuối trang nhé.',
   ];
 
@@ -683,6 +809,153 @@ export function CertificateLookup() {
           )}
         </Button>
       </form>
+
+      {/* Tìm theo đội — 1 người tra 1 lần là tải được giấy của cả đội */}
+      <div className="card mt-6 rounded-3xl p-5 shadow-lg sm:p-7">
+        <h2 className="text-lg font-bold text-slate-900">Tìm theo đội</h2>
+        <p className="mt-1 text-sm leading-relaxed text-slate-600">
+          Gõ số đội (vd: 06) hoặc vài chữ đầu tên đội — gợi ý hiện ngay như ô tên bên trên.
+          Một người tra là tải được giấy của cả đội, mỗi thành viên 1 nút tải riêng.
+        </p>
+        <form onSubmit={handleTeamSearch} className="relative mt-4">
+          <div className="space-y-2">
+            <label htmlFor="teamName" className="block text-sm font-medium text-slate-700">
+              Tên đội hoặc số đội
+            </label>
+            <input
+              id="teamName"
+              type="text"
+              className="input-field"
+              placeholder="VD: SIÊU LỐP hoặc 06"
+              value={teamQuery}
+              onChange={(e) => {
+                setTeamQuery(e.target.value);
+                setPickedTeam(null);
+                updateTeamSuggestions(e.target.value);
+              }}
+              onFocus={() => {
+                if (teamQuery) updateTeamSuggestions(teamQuery);
+              }}
+              onBlur={() => setTeamSuggestOpen(false)}
+              onKeyDown={(e) => {
+                if (!teamSuggestOpen || teamSuggestItems.length === 0) return;
+                if (e.key === 'ArrowDown') {
+                  e.preventDefault();
+                  setTeamSuggestActive((a) => (a + 1) % teamSuggestItems.length);
+                } else if (e.key === 'ArrowUp') {
+                  e.preventDefault();
+                  setTeamSuggestActive((a) => (a - 1 + teamSuggestItems.length) % teamSuggestItems.length);
+                } else if (e.key === 'Enter') {
+                  e.preventDefault();
+                  pickTeamSuggestion(teamSuggestItems[teamSuggestActive]);
+                } else if (e.key === 'Escape') {
+                  setTeamSuggestOpen(false);
+                }
+              }}
+              autoComplete="off"
+            />
+            {teamSuggestOpen && teamSuggestItems.length > 0 && (
+              <ul className="absolute left-0 right-0 top-full z-20 mt-1 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-lg">
+                {teamSuggestItems.map((t, i) => (
+                  <li key={t.num}>
+                    <button
+                      type="button"
+                      tabIndex={-1}
+                      onMouseDown={(e) => {
+                        e.preventDefault();
+                        pickTeamSuggestion(t);
+                      }}
+                      onMouseEnter={() => setTeamSuggestActive(i)}
+                      className={cn(
+                        'block w-full px-3 py-2 text-left text-sm text-slate-700',
+                        i === teamSuggestActive ? 'bg-geoenv-50 text-geoenv-800' : 'hover:bg-geoenv-50',
+                      )}
+                    >
+                      {teamLabel(t)}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+          <Button type="submit" variant="primary" className="mt-4 w-full text-base" disabled={teamLoading}>
+            {teamLoading ? (
+              <>
+                <span className="h-4 w-4 shrink-0 animate-spin rounded-full border-2 border-white/30 border-t-white" />
+                Đang tìm đội...
+              </>
+            ) : (
+              <>
+                <Search className="h-5 w-5" />
+                Tìm đội
+              </>
+            )}
+          </Button>
+        </form>
+
+        {teamMessage && (
+          <p className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+            {teamMessage}
+          </p>
+        )}
+        {teamError && (
+          <div className="mt-4 flex items-start gap-3 rounded-2xl border border-red-200 bg-red-50 p-4 text-red-700">
+            <AlertCircle className="mt-0.5 h-5 w-5 shrink-0" />
+            <p className="text-sm">{teamError}</p>
+          </div>
+        )}
+
+        {teamHeader && teamMembers && (
+          <div className="mt-5">
+            <p className="text-base font-bold text-slate-900">
+              {teamLabel(teamHeader)} — {teamMembers.length} thành viên
+            </p>
+            <p className="mt-1 text-xs text-slate-500">
+              Bấm từng nút để tải giấy của từng thành viên. Người bị khóa sẽ không có nút tải.
+            </p>
+            <ul className="mt-3 space-y-2">
+              {teamMembers.map((m) => {
+                const note = teamLinkNote[`${m.fullName}|${m.className}`];
+                return (
+                  <li
+                    key={`${m.fullName}|${m.className}`}
+                    className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-slate-200 px-4 py-3"
+                  >
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium text-slate-900">
+                        Lượt {m.order}: {m.fullName}
+                      </p>
+                      <p className="text-xs text-slate-500">Lớp {m.className}</p>
+                      {!m.row && (
+                        <p className="mt-0.5 text-xs text-amber-600">
+                          Chưa có hồ sơ trong hệ thống
+                        </p>
+                      )}
+                      {m.row && !m.row.is_eligible && (
+                        <p className="mt-0.5 text-xs text-red-600">
+                          Bị khóa
+                          {m.row.violation_reason ? `: ${m.row.violation_reason}` : ''}
+                        </p>
+                      )}
+                      {note && <p className="mt-0.5 text-xs text-slate-500">{note}</p>}
+                    </div>
+                    {m.row && m.row.is_eligible && (
+                      <Button
+                        variant="primary"
+                        className="shrink-0 px-4 py-2 text-sm"
+                        onClick={() => void handleTeamDownload(m)}
+                      >
+                        <Download className="h-4 w-4" />
+                        Tải giấy
+                      </Button>
+                    )}
+                  </li>
+                );
+              })}
+            </ul>
+          </div>
+        )}
+      </div>
 
       {/* Báo lỗi hệ thống */}
       {error && (
