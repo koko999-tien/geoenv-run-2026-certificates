@@ -41,3 +41,37 @@ export function usePublicLock() {
   }, []);
   return lock;
 }
+
+/* Cờ khóa trò chơi (bảng site_settings, key game_locked).
+   NGƯỢC với khóa tra cứu: bảng chưa có hoặc đọc lỗi thì coi như ĐANG KHÓA
+   (fail closed) — trò chơi ra mắt ở trạng thái khóa, chỉ quản trị viên chơi
+   được, đến khi Tiến mở bằng công tắc trong Dashboard. */
+export async function isGameLocked(): Promise<boolean> {
+  try {
+    const { data } = await supabase
+      .from('site_settings')
+      .select('value')
+      .eq('key', 'game_locked')
+      .maybeSingle();
+    if (!data) return true;
+    return data.value === 'true';
+  } catch {
+    return true;
+  }
+}
+
+/* Hook dùng chung cho tab trò chơi: đang kiểm tra / bị khóa / có phải admin. */
+export function useGameLock() {
+  const [lock, setLock] = useState({ checked: false, locked: true, isAdmin: false });
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      const [locked, session] = await Promise.all([isGameLocked(), hasAdminSession()]);
+      if (alive) setLock({ checked: true, locked, isAdmin: !!session });
+    })();
+    return () => {
+      alive = false;
+    };
+  }, []);
+  return lock;
+}

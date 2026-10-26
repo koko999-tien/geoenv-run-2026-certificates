@@ -1,6 +1,13 @@
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { Gamepad2, ArrowRight, RotateCcw, Trophy, Check, X } from 'lucide-react';
+import { Gamepad2, ArrowRight, RotateCcw, Trophy, Check, X, Footprints, Lock } from 'lucide-react';
+import { useGameLock } from '../lib/siteLock';
+import { RunnerGame } from './RunnerGame';
+
+/* Trang Minigame: 2 tab — đố vui (cũ) và chạy vô tận (mới).
+   Tab chạy vô tận ra mắt ở trạng thái KHÓA: khách chỉ thấy thông báo tạm khóa,
+   quản trị viên đăng nhập mới chơi và lưu điểm được. Mở cho mọi người bằng
+   công tắc trong Dashboard, không cần đẩy code. */
 
 /* Mini game đố vui về GEOENV RUN — chạy hoàn toàn trên trình duyệt, không cần
    đăng nhập, không tính giờ, không lưu điểm lên máy chủ. */
@@ -148,7 +155,7 @@ function Confetti() {
   );
 }
 
-export function ChillGame() {
+function QuizGame() {
   const [index, setIndex] = useState(0);
   const [selected, setSelected] = useState<number | null>(null);
   const [score, setScore] = useState(0);
@@ -181,12 +188,12 @@ export function ChillGame() {
 
   if (finished) {
     return (
-      <div className="mx-auto max-w-2xl px-4 py-10 text-center sm:px-6">
+      <div className="text-center">
         {score >= 12 && <Confetti />}
         <span className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-amber-100">
           <Trophy className="h-7 w-7 text-amber-600" />
         </span>
-        <h1 className="mt-4 text-2xl font-bold text-slate-900 sm:text-3xl">Kết quả của bạn</h1>
+        <h2 className="mt-4 text-2xl font-bold text-slate-900 sm:text-3xl">Kết quả của bạn</h2>
         <p className="mt-3 text-5xl font-black tabular-nums text-geoenv-700">
           {score}/{QUESTIONS.length}
         </p>
@@ -211,17 +218,11 @@ export function ChillGame() {
   }
 
   return (
-    <div className="mx-auto max-w-2xl px-4 py-10 sm:px-6">
-      <div className="text-center">
-        <span className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-violet-100">
-          <Gamepad2 className="h-7 w-7 text-violet-600" />
-        </span>
-        <h1 className="mt-4 text-2xl font-bold text-slate-900 sm:text-3xl">Minigame</h1>
-        <p className="mt-2 text-sm leading-relaxed text-slate-600 sm:text-base">
-          Bạn hiểu GEOENV RUN đến đâu? Trả lời 15 câu hỏi, có vài câu hóc búa đấy — không
-          tính giờ, sai cũng không sao.
-        </p>
-      </div>
+    <div>
+      <p className="text-center text-sm leading-relaxed text-slate-600 sm:text-base">
+        Bạn hiểu GEOENV RUN đến đâu? Trả lời 15 câu hỏi, có vài câu hóc búa đấy — không
+        tính giờ, sai cũng không sao.
+      </p>
 
       <div className="card mt-8 p-5 sm:p-6">
         <div className="flex items-center justify-between text-sm">
@@ -283,6 +284,87 @@ export function ChillGame() {
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+/* Tab chạy vô tận: khóa với khách, quản trị viên đăng nhập mới chơi được. */
+function RunnerTab() {
+  const { checked, locked, isAdmin } = useGameLock();
+
+  if (!checked) {
+    return <p className="py-10 text-center text-sm text-slate-500">Đang tải…</p>;
+  }
+
+  if (locked && !isAdmin) {
+    return (
+      <div className="card mt-8 p-6 text-center sm:p-8">
+        <span className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-amber-100">
+          <Lock className="h-7 w-7 text-amber-600" />
+        </span>
+        <h2 className="mt-4 text-xl font-bold text-slate-900">Trò chơi đang tạm khóa</h2>
+        <p className="mx-auto mt-2 max-w-md text-sm leading-relaxed text-slate-600">
+          Chỉ quản trị viên chơi được lúc này. Ban tổ chức sẽ thông báo khi mở cho mọi người.
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      {locked && (
+        <div className="mb-5 rounded-xl bg-amber-50 px-4 py-3 text-center text-sm font-medium text-amber-800 ring-1 ring-amber-200">
+          Bạn đang chơi với quyền quản trị viên — trò chơi đang khóa với khách.
+        </div>
+      )}
+      <p className="text-center text-sm leading-relaxed text-slate-600 sm:text-base">
+        Vận động viên chạy vô tận: nhảy qua rào chắn, tảng đá, vũng nước. Càng chạy càng nhanh.
+      </p>
+      <div className="mt-8">
+        <RunnerGame />
+      </div>
+    </div>
+  );
+}
+
+export function ChillGame() {
+  const [tab, setTab] = useState<'quiz' | 'runner'>('quiz');
+
+  return (
+    <div className="mx-auto max-w-2xl px-4 py-10 sm:px-6">
+      <div className="text-center">
+        <span className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-violet-100">
+          <Gamepad2 className="h-7 w-7 text-violet-600" />
+        </span>
+        <h1 className="mt-4 text-2xl font-bold text-slate-900 sm:text-3xl">Minigame</h1>
+      </div>
+
+      <div className="mt-6 flex justify-center gap-2">
+        <button
+          onClick={() => setTab('quiz')}
+          className={`flex items-center gap-2 rounded-full px-5 py-2.5 text-sm font-semibold transition-colors ${
+            tab === 'quiz'
+              ? 'bg-geoenv-600 text-white'
+              : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+          }`}
+        >
+          <Gamepad2 className="h-4 w-4" />
+          Đố vui
+        </button>
+        <button
+          onClick={() => setTab('runner')}
+          className={`flex items-center gap-2 rounded-full px-5 py-2.5 text-sm font-semibold transition-colors ${
+            tab === 'runner'
+              ? 'bg-geoenv-600 text-white'
+              : 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+          }`}
+        >
+          <Footprints className="h-4 w-4" />
+          Chạy vô tận
+        </button>
+      </div>
+
+      <div className="mt-6">{tab === 'quiz' ? <QuizGame /> : <RunnerTab />}</div>
     </div>
   );
 }

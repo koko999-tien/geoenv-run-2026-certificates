@@ -34,6 +34,9 @@ const AdminDashboard = lazy(() =>
 const AdminCertificates = lazy(() =>
   import('./pages/AdminCertificates').then((m) => ({ default: m.AdminCertificates })),
 );
+const AdminGameScores = lazy(() =>
+  import('./pages/AdminGameScores').then((m) => ({ default: m.AdminGameScores })),
+);
 
 /* Web này là trang đơn (không tải lại trang khi chuyển mục) nên trình duyệt giữ
    nguyên vị trí cuộn sang trang mới — đang ở cuối trang chủ mà bấm sang trang
@@ -108,6 +111,7 @@ const App = () => {
           <Route path="/quan-tri/chung-nhan" element={<AdminCertificates />} />
           <Route path="/quan-tri/phan-anh" element={<AdminFeedback />} />
           <Route path="/quan-tri/ket-qua" element={<AdminResults />} />
+          <Route path="/quan-tri/tro-choi" element={<AdminGameScores />} />
         </Route>
 
         <Route path="*" element={<Navigate to="/" replace />} />
