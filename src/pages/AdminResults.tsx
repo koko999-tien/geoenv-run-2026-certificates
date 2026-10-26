@@ -37,6 +37,7 @@ export function AdminResults() {
   const [tab, setTab] = useState<Tab>('all');
   const [confirmDeleteId, setConfirmDeleteId] = useState<number | null>(null);
   const [actingId, setActingId] = useState<number | null>(null);
+  const [copyNote, setCopyNote] = useState('');
 
   const fetchItems = async () => {
     setLoading(true);
@@ -59,6 +60,23 @@ export function AdminResults() {
   useEffect(() => {
     void fetchItems();
   }, []);
+
+  /* Sao chép toàn bộ danh sách người đã gửi (tên — đội — lớp — thành tích),
+     mỗi người 1 dòng, để đối chiếu nhanh mà khỏi bấm vào từng ảnh */
+  const handleCopyList = async () => {
+    const lines = items.map((it) => {
+      const parts = [it.full_name, `Đội ${it.team}`];
+      if (it.class_name) parts.push(`Lớp ${it.class_name}`);
+      if (it.result_time) parts.push(it.result_time);
+      return parts.join(' — ');
+    });
+    try {
+      await navigator.clipboard.writeText(lines.join('\n'));
+      setCopyNote(`Đã sao chép ${lines.length} tên vào bộ nhớ tạm.`);
+    } catch {
+      setCopyNote('Không sao chép được, thử lại nhé.');
+    }
+  };
 
   const toggleVerified = async (item: Submission) => {
     setActingId(item.id);
@@ -141,6 +159,51 @@ export function AdminResults() {
           </button>
         ))}
       </div>
+
+      {/* Thẻ thống kê: danh sách gọn tất cả người đã gửi, không kèm ảnh — lướt
+          một mạch là thấy hết tên, khỏi bấm vào từng ảnh để đọc */}
+      {!loading && items.length > 0 && (
+        <div className="card mt-6 p-4 sm:p-5">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <h2 className="text-base font-bold text-slate-900">
+              Danh sách người đã gửi ({items.length})
+            </h2>
+            <button
+              onClick={() => void handleCopyList()}
+              className="rounded-xl border border-slate-300 bg-white px-3.5 py-2 text-sm font-medium text-slate-700 transition-colors hover:border-geoenv-400 hover:text-geoenv-700"
+            >
+              Sao chép danh sách
+            </button>
+          </div>
+          <p className="mt-1 text-xs text-slate-500">
+            Đã duyệt {items.length - pendingCount} · Chờ duyệt {pendingCount} · Thông tin do
+            người nộp tự gõ, ảnh là bằng chứng đối chiếu.
+          </p>
+          {copyNote && <p className="mt-2 text-sm text-emerald-700">{copyNote}</p>}
+          <ul className="mt-3 divide-y divide-slate-100">
+            {items.map((it) => (
+              <li key={it.id} className="flex flex-wrap items-center justify-between gap-2 py-2">
+                <p className="text-sm text-slate-700">
+                  <span className="font-semibold text-slate-900">{it.full_name}</span>
+                  {' — Đội '}
+                  {it.team}
+                  {it.class_name ? ` · Lớp ${it.class_name}` : ''}
+                  {it.result_time ? ` · ${it.result_time}` : ''}
+                </p>
+                {it.is_verified ? (
+                  <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-2.5 py-0.5 text-xs font-bold text-emerald-800">
+                    <CheckCircle2 className="h-3.5 w-3.5" /> Đã duyệt
+                  </span>
+                ) : (
+                  <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2.5 py-0.5 text-xs font-bold text-amber-800">
+                    <Clock3 className="h-3.5 w-3.5" /> Chờ duyệt
+                  </span>
+                )}
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       {error && (
         <p className="mt-4 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">{error}</p>
