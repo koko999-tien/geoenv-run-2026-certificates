@@ -1896,9 +1896,10 @@ export function RunnerGame() {
         pts[i].y += (ty - pts[i].y) * 0.45;
       }
 
-      /* Camera: zoom out khi nhanh/cao, lia Y theo độ cao, rung giảm chấn. */
+      /* Camera: KHÔNG zoom-out nữa — zoom làm cả đường chạy co lại mỗi khi
+         nhảy cao/chạy nhanh. Chỉ giữ lia Y theo độ cao + rung giảm chấn. */
       const heightAbove = Math.max(0, GROUND - RUNNER_H - s.y);
-      const targetScale = s.speed > 11 || heightAbove > 60 ? 0.94 : 1;
+      const targetScale = 1;
       s.camScale += (targetScale - s.camScale) * (1 - Math.exp(-3 * dtSec));
       const targetCamY = s.airborne ? -heightAbove * 0.22 : 0;
       s.camY += (targetCamY - s.camY) * (1 - Math.exp(-4 * dtSec));
