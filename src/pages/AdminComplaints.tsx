@@ -3,7 +3,9 @@ import { supabase } from '../lib/supabase';
 
 /* Trang quản trị khiếu nại giấy bị khóa — Ban tổ chức xem khiếu nại gửi từ
    thẻ bị khóa trong trang tra cứu (kèm ảnh minh chứng), đánh dấu đã xử lý
-   hoặc xóa. Chỉ admin đã đăng nhập mới đọc được danh sách này. */
+   hoặc xóa. Chỉ admin đã đăng nhập mới đọc được danh sách này.
+   Ảnh nằm trong bucket riêng tư nên trang tự tạo link ký riêng (hết hạn sau
+   1 giờ) cho từng ảnh khi tải danh sách. */
 const COMPLAINT_BUCKET = 'complaint-evidence';
 
 /* Lỗi Supabase trả về là object thường, không phải Error — đọc message trực tiếp */
@@ -37,6 +39,8 @@ export function AdminComplaints() {
   const [tab, setTab] = useState<Tab>('all');
   const [confirmDeleteId, setConfirmDeleteId] = useState<number | null>(null);
   const [actingId, setActingId] = useState<number | null>(null);
+  /* Link ký riêng từng ảnh (id khiếu nại -> link), tạo mới mỗi lần tải danh sách */
+  const [signedUrls, setSignedUrls] = useState<Record<number, string>>({});
 
   const fetchItems = async () => {
     setLoading(true);
@@ -50,8 +54,23 @@ export function AdminComplaints() {
         `Không tải được danh sách khiếu nại: ${supaMsg(error)}. Nếu bảng chưa được tạo, chạy file SQL tạo bảng khiếu nại rồi tải lại trang.`,
       );
       setItems([]);
+      setSignedUrls({});
     } else {
-      setItems((data ?? []) as Complaint[]);
+      const list = (data ?? []) as Complaint[];
+      setItems(list);
+      /* Tạo link ký riêng cho từng ảnh có đường dẫn (link hết hạn sau 1 giờ) */
+      const urls: Record<number, string> = {};
+      await Promise.all(
+        list
+          .filter((it) => it.photo_path)
+          .map(async (it) => {
+            const { data: signed } = await supabase.storage
+              .from(COMPLAINT_BUCKET)
+              .createSignedUrl(it.photo_path!, 3600);
+            if (signed?.signedUrl) urls[it.id] = signed.signedUrl;
+          }),
+      );
+      setSignedUrls(urls);
     }
     setLoading(false);
   };
@@ -163,14 +182,17 @@ export function AdminComplaints() {
               </span>
             </div>
             <p className="mt-3 whitespace-pre-wrap text-sm leading-relaxed text-slate-700">{it.message}</p>
-            {it.photo_url && (
-              <a href={it.photo_url} target="_blank" rel="noreferrer" className="mt-3 block">
+            {it.photo_path && signedUrls[it.id] && (
+              <a href={signedUrls[it.id]} target="_blank" rel="noreferrer" className="mt-3 block">
                 <img
-                  src={it.photo_url}
+                  src={signedUrls[it.id]}
                   alt="Ảnh minh chứng khiếu nại"
                   className="max-h-64 rounded-xl object-contain ring-1 ring-slate-200"
                 />
               </a>
+            )}
+            {it.photo_path && !signedUrls[it.id] && (
+              <p className="mt-3 text-xs text-slate-500">Không tạo được link xem ảnh, thử tải lại trang.</p>
             )}
             <div className="mt-4 flex flex-wrap gap-2">
               <button

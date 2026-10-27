@@ -37,7 +37,6 @@ export function ComplaintForm({ recordId, fullName, className, lockReason }: Com
     setError('');
     setSubmitting(true);
     try {
-      let photoUrl: string | null = null;
       let photoPath: string | null = null;
       if (file) {
         const compressed = await compressImage(file);
@@ -55,8 +54,8 @@ export function ComplaintForm({ recordId, fullName, className, lockReason }: Com
           setSubmitting(false);
           return;
         }
-        const { data: pub } = supabase.storage.from(COMPLAINT_BUCKET).getPublicUrl(path);
-        photoUrl = pub.publicUrl;
+        /* Bucket riêng tư nên không lấy link công khai — trang quản trị sẽ tạo
+           link ký riêng từ đường dẫn này khi admin mở xem. */
         photoPath = path;
       }
       /* Insert thuần (không xin lại dữ liệu) — bảng chỉ cho khách INSERT nên
@@ -67,7 +66,7 @@ export function ComplaintForm({ recordId, fullName, className, lockReason }: Com
         class_name: className,
         lock_reason: lockReason,
         message: message.trim(),
-        photo_url: photoUrl,
+        photo_url: null,
         photo_path: photoPath,
         status: 'pending',
       });
