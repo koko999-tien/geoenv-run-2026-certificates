@@ -181,7 +181,7 @@ export function AdminDashboard() {
       <div className="card mt-6 p-6 sm:p-7">
         <h3 className="flex items-center gap-2.5 text-lg font-bold text-slate-900">
           <Trophy className="h-5 w-5 text-geoenv-600" />
-          Sẵn sàng đợt cuối 28/10
+          Tổng quan đợt cuối 28/10
         </h3>
         {stats.loading ? (
           <Loader2 className="mt-4 h-6 w-6 animate-spin text-geoenv-600" />
