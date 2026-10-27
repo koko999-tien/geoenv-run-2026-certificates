@@ -245,11 +245,14 @@ export function AdminCertificates() {
   const [addResult, setAddResult] = useState('');
   const [addError, setAddError] = useState('');
 
-  /* Sửa tên/lớp ngay trong bảng — bấm Sửa ở dòng nào thì dòng đó thành ô nhập */
+  /* Sửa tên/lớp/lý do khóa ngay trong bảng — bấm Sửa ở dòng nào thì dòng đó thành ô nhập;
+     ô lý do chỉ hiện khi hồ sơ đang bị khóa */
   const [editing, setEditing] = useState<{
     id: string;
     fullName: string;
     className: string;
+    lockReason: string;
+    isLocked: boolean;
   } | null>(null);
   const [savingEdit, setSavingEdit] = useState(false);
 
@@ -496,7 +499,8 @@ export function AdminCertificates() {
     }
   };
 
-  /* Lưu tên/lớp đã sửa ngay trong bảng — chỉ gọn khoảng trắng, không đổi câu chữ */
+  /* Lưu tên/lớp/lý do đã sửa ngay trong bảng — chỉ gọn khoảng trắng, không đổi câu chữ;
+     hồ sơ bị khóa thì lưu kèm lý do mới, hồ sơ đủ điều kiện thì không đụng tới lý do */
   const handleSaveEdit = async () => {
     if (!editing) return;
     const fullName = clean(editing.fullName);
@@ -505,11 +509,23 @@ export function AdminCertificates() {
       alert('Vui lòng nhập đủ họ tên và lớp.');
       return;
     }
+    let lockReason = '';
+    if (editing.isLocked) {
+      lockReason = clean(editing.lockReason);
+      if (!lockReason) {
+        alert('Vui lòng nhập lý do khóa để vận động viên biết vì sao bị khóa.');
+        return;
+      }
+    }
     setSavingEdit(true);
     try {
       const { error } = await supabase
         .from('certificate_records')
-        .update({ full_name: fullName, class_name: className })
+        .update({
+          full_name: fullName,
+          class_name: className,
+          ...(editing.isLocked ? { violation_reason: lockReason } : {}),
+        })
         .eq('id', editing.id);
       if (error) throw error;
       setEditing(null);
@@ -854,10 +870,22 @@ export function AdminCertificates() {
                           <span className="inline-flex items-center gap-1.5 rounded-full bg-red-50 px-2.5 py-1 text-xs font-medium text-red-700 ring-1 ring-red-200">
                             <Lock className="h-3 w-3" /> Bị khóa
                           </span>
-                          {row.violation_reason && (
-                            <span className="mt-1 block max-w-[220px] text-xs leading-relaxed text-slate-500">
-                              Lý do: {row.violation_reason}
-                            </span>
+                          {isEditing ? (
+                            <input
+                              type="text"
+                              className="mt-1 block w-full max-w-[220px] rounded-lg border border-slate-300 px-2 py-1.5 text-sm"
+                              aria-label="Lý do khóa đang sửa"
+                              value={editing.lockReason}
+                              onChange={(e) =>
+                                setEditing({ ...editing, lockReason: e.target.value })
+                              }
+                            />
+                          ) : (
+                            row.violation_reason && (
+                              <span className="mt-1 block max-w-[220px] text-xs leading-relaxed text-slate-500">
+                                Lý do: {row.violation_reason}
+                              </span>
+                            )
                           )}
                         </span>
                       )}
@@ -899,6 +927,8 @@ export function AdminCertificates() {
                                 id: row.id,
                                 fullName: row.full_name,
                                 className: row.class_name,
+                                lockReason: row.violation_reason ?? '',
+                                isLocked: !row.is_eligible,
                               })
                             }
                             className="inline-flex items-center gap-1.5 rounded-lg px-2.5 py-1.5 text-xs font-medium text-geoenv-700 ring-1 ring-geoenv-200 transition-colors hover:bg-geoenv-50"
