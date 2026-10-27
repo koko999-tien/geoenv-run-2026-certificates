@@ -56,8 +56,25 @@ export function AdminDashboard() {
   useEffect(() => {
     const loadStats = async () => {
       try {
-        const [locked, unreadFeedback, pendingResults] =
+        const [totalRes, eligibleRes, ineligibleRes, hasLinkRes, noLinkRes, locked, unreadFeedback, pendingResults] =
           await Promise.all([
+            supabase.from('certificate_records').select('*', { count: 'exact', head: true }),
+            supabase
+              .from('certificate_records')
+              .select('*', { count: 'exact', head: true })
+              .eq('is_eligible', true),
+            supabase
+              .from('certificate_records')
+              .select('*', { count: 'exact', head: true })
+              .eq('is_eligible', false),
+            supabase
+              .from('certificate_records')
+              .select('*', { count: 'exact', head: true })
+              .not('certificate_url', 'is', null),
+            supabase
+              .from('certificate_records')
+              .select('*', { count: 'exact', head: true })
+              .is('certificate_url', null),
             isPublicLocked(),
             /* Số phản ánh chưa đọc — nuốt lỗi riêng để bảng hòm thư chưa có cũng
                không làm mất số liệu các bảng khác */
@@ -82,6 +99,11 @@ export function AdminDashboard() {
           ]);
         setStats((s) => ({
           ...s,
+          totalCertificates: totalRes.count ?? 0,
+          eligibleCount: eligibleRes.count ?? 0,
+          ineligibleCount: ineligibleRes.count ?? 0,
+          hasLinkCount: hasLinkRes.count ?? 0,
+          noLinkCount: noLinkRes.count ?? 0,
           unreadFeedback,
           pendingResults,
           loading: false,
@@ -151,6 +173,52 @@ export function AdminDashboard() {
     <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6 lg:px-8">
       <div className="mb-8">
         <h1 className="text-2xl font-bold text-slate-900 sm:text-3xl">Tổng quan</h1>
+      </div>
+
+      {/* Thẻ số liệu đợt cuối — cố tình không để tiêu đề theo ý Tiến */}
+      <div className="card mt-6 p-6 sm:p-7">
+        {stats.loading ? (
+          <Loader2 className="mt-4 h-6 w-6 animate-spin text-geoenv-600" />
+        ) : (
+          <div className="mt-4 grid grid-cols-2 gap-4 sm:grid-cols-5">
+            <div>
+              <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Tổng hồ sơ</p>
+              <p className="mt-1 text-2xl font-bold tabular-nums text-slate-900 sm:text-3xl">
+                {stats.totalCertificates}
+              </p>
+            </div>
+            <div>
+              <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Đủ điều kiện</p>
+              <p className="mt-1 text-2xl font-bold tabular-nums text-emerald-700 sm:text-3xl">
+                {stats.eligibleCount}
+              </p>
+            </div>
+            <div>
+              <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Bị khóa</p>
+              <p className="mt-1 text-2xl font-bold tabular-nums text-red-700 sm:text-3xl">
+                {stats.ineligibleCount}
+              </p>
+            </div>
+            <div>
+              <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Đã có link</p>
+              <p className="mt-1 text-2xl font-bold tabular-nums text-slate-900 sm:text-3xl">
+                {stats.hasLinkCount}
+              </p>
+            </div>
+            <div>
+              <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Chưa có link</p>
+              <p className="mt-1 text-2xl font-bold tabular-nums text-amber-700 sm:text-3xl">
+                {stats.noLinkCount}
+              </p>
+            </div>
+          </div>
+        )}
+        <Link
+          to="/quan-tri/chung-nhan"
+          className="mt-5 inline-flex items-center gap-1.5 text-sm font-medium text-geoenv-700 hover:text-geoenv-800"
+        >
+          Vào quản lý chứng nhận <span aria-hidden>→</span>
+        </Link>
       </div>
 
       {/* Lượt truy cập — CHỈ quản trị viên thấy: thẻ này nằm trong trang quản trị
