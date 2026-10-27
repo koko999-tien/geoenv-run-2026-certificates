@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Users, Loader2, ListChecks, Lock, Mail, Eye, Trophy } from 'lucide-react';
+import { Users, Loader2, ListChecks, Lock, Mail, Eye, Trophy, MessageSquareWarning } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { isPublicLocked } from '../lib/siteLock';
@@ -12,6 +12,7 @@ interface Stats {
   noLinkCount: number;
   unreadFeedback: number | null;
   pendingResults: number | null;
+  pendingComplaints: number | null;
   loading: boolean;
 }
 
@@ -40,6 +41,7 @@ export function AdminDashboard() {
     noLinkCount: 0,
     unreadFeedback: null,
     pendingResults: null,
+    pendingComplaints: null,
     loading: true,
   });
   /* Lượt truy cập — null = đang tải, lỗi thì hiện câu báo riêng, không làm mất
@@ -56,7 +58,7 @@ export function AdminDashboard() {
   useEffect(() => {
     const loadStats = async () => {
       try {
-        const [totalRes, eligibleRes, ineligibleRes, hasLinkRes, noLinkRes, locked, unreadFeedback, pendingResults] =
+        const [totalRes, eligibleRes, ineligibleRes, hasLinkRes, noLinkRes, locked, unreadFeedback, pendingResults, pendingComplaints] =
           await Promise.all([
             supabase.from('certificate_records').select('*', { count: 'exact', head: true }),
             supabase
@@ -96,6 +98,16 @@ export function AdminDashboard() {
                 (res) => res.count ?? null,
                 () => null,
               ),
+            /* Số khiếu nại chờ xử lý — nuốt lỗi riêng để bảng khiếu nại chưa có
+               cũng không làm mất số liệu các bảng khác */
+            supabase
+              .from('certificate_complaints')
+              .select('*', { count: 'exact', head: true })
+              .neq('status', 'resolved')
+              .then(
+                (res) => res.count ?? null,
+                () => null,
+              ),
           ]);
         setStats((s) => ({
           ...s,
@@ -106,6 +118,7 @@ export function AdminDashboard() {
           noLinkCount: noLinkRes.count ?? 0,
           unreadFeedback,
           pendingResults,
+          pendingComplaints,
           loading: false,
         }));
         setSiteLocked(locked);
@@ -251,7 +264,7 @@ export function AdminDashboard() {
                 </p>
               </div>
               <div>
-                <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Người khác nhau</p>
+                <p className="text-xs font-medium uppercase tracking-wide text-slate-500">Người dùng</p>
                 <p className="mt-1 text-2xl font-bold tabular-nums text-slate-900 sm:text-3xl">
                   {visits.unique}
                 </p>
@@ -345,6 +358,21 @@ export function AdminDashboard() {
               badge:
                 stats.pendingResults && stats.pendingResults > 0
                   ? `${stats.pendingResults} chờ duyệt`
+                  : null,
+            },
+          ]}
+        />
+        <ActionCard
+          title="Khiếu nại"
+          icon={<MessageSquareWarning className="h-5 w-5 text-red-600" />}
+          items={[
+            {
+              to: '/quan-tri/khieu-nai',
+              label: 'Xem khiếu nại',
+              icon: MessageSquareWarning,
+              badge:
+                stats.pendingComplaints && stats.pendingComplaints > 0
+                  ? `${stats.pendingComplaints} chờ xử lý`
                   : null,
             },
           ]}
