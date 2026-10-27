@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { ImagePlus } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { compressImage } from '../lib/image';
 
@@ -109,17 +110,33 @@ export function ComplaintForm({ recordId, fullName, className, lockReason }: Com
         />
       </div>
       <div>
-        <label htmlFor="complaint-photo" className="mb-1 block text-xs font-medium text-slate-600">
-          Ảnh minh chứng (không bắt buộc)
-        </label>
-        <input
-          id="complaint-photo"
-          type="file"
-          accept="image/*"
-          className="w-full text-sm text-slate-600"
-          onChange={(e) => setFile(e.target.files?.[0] ?? null)}
-        />
-        {file && <p className="mt-1 text-xs text-slate-500">Đã chọn: {file.name}</p>}
+        <p className="mb-1 text-xs font-medium text-slate-600">Ảnh minh chứng (không bắt buộc)</p>
+        {file ? (
+          <div className="flex items-center gap-2">
+            <label className="cursor-pointer rounded-xl border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition-colors hover:border-geoenv-400 hover:text-geoenv-700">
+              Đổi ảnh khác
+              <input
+                type="file"
+                accept="image/*"
+                className="hidden"
+                onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+              />
+            </label>
+            <span className="truncate text-xs text-slate-500">{file.name}</span>
+          </div>
+        ) : (
+          <label className="flex cursor-pointer flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-slate-300 bg-slate-50/60 px-4 py-8 text-center transition-colors hover:border-geoenv-400 hover:bg-geoenv-50/50">
+            <ImagePlus className="h-8 w-8 text-slate-400" />
+            <span className="text-sm font-medium text-slate-700">Ấn vào để tải ảnh lên</span>
+            <span className="text-xs text-slate-500">Ảnh chụp màn hình, ảnh tham gia giải chạy...</span>
+            <input
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={(e) => setFile(e.target.files?.[0] ?? null)}
+            />
+          </label>
+        )}
       </div>
       {error && <p className="text-sm font-medium text-red-600">{error}</p>}
       <button
