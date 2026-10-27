@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Users, ShieldCheck, Loader2, ListChecks, Lock, Mail, Eye, Trophy } from 'lucide-react';
+import { Users, Loader2, ListChecks, Lock, Mail, Eye, Trophy } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { supabase } from '../lib/supabase';
 import { isPublicLocked } from '../lib/siteLock';
@@ -169,34 +169,10 @@ export function AdminDashboard() {
     setToggling(false);
   };
 
-  const statCards = [
-    { title: 'Tổng hồ sơ chứng nhận', value: stats.totalCertificates, icon: Users, tone: 'bg-geoenv-50 text-geoenv-600 ring-geoenv-100' },
-    { title: 'Đủ điều kiện nhận', value: stats.eligibleCount, icon: ShieldCheck, tone: 'bg-emerald-50 text-emerald-600 ring-emerald-100' },
-  ];
-
   return (
     <div className="mx-auto max-w-6xl px-4 py-8 sm:px-6 lg:px-8">
       <div className="mb-8">
         <h1 className="text-2xl font-bold text-slate-900 sm:text-3xl">Tổng quan</h1>
-      </div>
-
-      {/* 2 ô thống kê — số thật từ Supabase */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-        {statCards.map((card) => (
-          <div key={card.title} className="card flex items-center justify-between p-5">
-            <div className="min-w-0">
-              <p className="text-xs font-medium uppercase tracking-wide text-slate-500">{card.title}</p>
-              {stats.loading ? (
-                <Loader2 className="mt-2 h-6 w-6 animate-spin text-geoenv-600" />
-              ) : (
-                <p className="mt-1 text-3xl font-bold tabular-nums text-slate-900">{card.value}</p>
-              )}
-            </div>
-            <span className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-xl ring-1 ${card.tone}`}>
-              <card.icon className="h-5 w-5" />
-            </span>
-          </div>
-        ))}
       </div>
 
       {/* Tổng quan đợt cuối 28/10 — nhìn một cái là biết còn thiếu gì trước ngày
