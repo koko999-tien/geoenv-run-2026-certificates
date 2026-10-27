@@ -6,6 +6,7 @@ import { cn } from '../lib/utils';
 import { supabase } from '../lib/supabase';
 import { usePublicLock } from '../lib/siteLock';
 import { PublicLockNotice } from '../components/PublicLockNotice';
+import { ComplaintForm } from '../components/ComplaintForm';
 import { OFFICIAL_MAJORS } from '../data/majors';
 import { teamLabel, matchTeams, resolveTeam, findTeam } from '../data/teamMap';
 import type { TeamInfo } from '../data/teamMap';
@@ -17,6 +18,8 @@ interface SearchResult {
   className: string | null;
   message: string;
   certificateUrl: string | null;
+  /* Id hồ sơ để gắn khiếu nại (null khi không khớp đúng 1 hồ sơ) */
+  recordId: number | null;
   /* Khóa tải do vi phạm — kèm lý do BTC ghi */
   locked: boolean;
   lockReason: string | null;
@@ -313,6 +316,7 @@ export function CertificateLookup() {
         className: record.class_name,
         message: 'Giấy chứng nhận của bạn đã bị khóa.',
         certificateUrl: null,
+        recordId: Number(record.id),
         locked: true,
         lockReason: record.violation_reason ?? null,
       };
@@ -325,6 +329,7 @@ export function CertificateLookup() {
       className: record.class_name,
       message: 'Tìm thấy giấy chứng nhận của bạn rồi! 🎉',
       certificateUrl: certUrl,
+      recordId: Number(record.id),
       locked: false,
       lockReason: null,
     };
@@ -337,6 +342,7 @@ export function CertificateLookup() {
     className: null,
     message: 'Chúng tôi chưa tìm thấy giấy chứng nhận khớp với họ tên bạn nhập.',
     certificateUrl: null,
+    recordId: null,
     locked: false,
     lockReason: null,
   });
@@ -420,6 +426,7 @@ export function CertificateLookup() {
           message:
             'Hệ thống thấy nhiều bản ghi trùng họ tên và lớp. Vui lòng liên hệ ban tổ chức để xác minh nhé.',
           certificateUrl: null,
+          recordId: null,
           locked: false,
           lockReason: null,
         });
@@ -467,6 +474,7 @@ export function CertificateLookup() {
         message:
           'Hệ thống thấy nhiều bản ghi trùng họ tên và lớp. Vui lòng liên hệ ban tổ chức để xác minh nhé.',
         certificateUrl: null,
+        recordId: null,
         locked: false,
         lockReason: null,
       });
@@ -1009,23 +1017,22 @@ export function CertificateLookup() {
                 </div>
               )}
 
-              {/* Bị khóa do vi phạm: không cho tải, hiện lý do + mail BTC */}
+              {/* Bị khóa: không cho tải, hiện lý do + form khiếu nại (thay cho liên hệ mail) */}
               {result.locked && (
                 <div className="mt-4 space-y-2 rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red-800">
                   <p>
                     <span className="font-semibold">Lý do: </span>
                     {result.lockReason ?? 'Vi phạm quy chế giải chạy.'}
                   </p>
-                  <p>
-                    Mọi thắc mắc vui lòng liên hệ Ban tổ chức qua email{' '}
-                    <a
-                      href="mailto:geoenvrun@gmail.com"
-                      className="font-semibold underline hover:text-red-900"
-                    >
-                      geoenvrun@gmail.com
-                    </a>
-                    .
-                  </p>
+                  {result.recordId !== null && result.fullName && (
+                    <ComplaintForm
+                      key={result.recordId}
+                      recordId={result.recordId}
+                      fullName={result.fullName}
+                      className={result.className}
+                      lockReason={result.lockReason}
+                    />
+                  )}
                 </div>
               )}
 

@@ -24,6 +24,9 @@ const AdminFeedback = lazy(() =>
 const AdminResults = lazy(() =>
   import('./pages/AdminResults').then((m) => ({ default: m.AdminResults })),
 );
+const AdminComplaints = lazy(() =>
+  import('./pages/AdminComplaints').then((m) => ({ default: m.AdminComplaints })),
+);
 const AdminLogin = lazy(() =>
   import('./pages/AdminLogin').then((m) => ({ default: m.AdminLogin })),
 );
@@ -105,6 +108,7 @@ const App = () => {
           <Route path="/quan-tri/chung-nhan" element={<AdminCertificates />} />
           <Route path="/quan-tri/phan-anh" element={<AdminFeedback />} />
           <Route path="/quan-tri/ket-qua" element={<AdminResults />} />
+          <Route path="/quan-tri/khieu-nai" element={<AdminComplaints />} />
         </Route>
 
         <Route path="*" element={<Navigate to="/" replace />} />
