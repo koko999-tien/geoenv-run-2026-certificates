@@ -538,6 +538,14 @@ export function CertificateLookup() {
         </div>
       )}
 
+      {/* Nhắc mở bằng Safari/Chrome — trình duyệt trong Zalo/Facebook không tải được file */}
+      {/zalo|fban|fbav|instagram/i.test(navigator.userAgent) && (
+        <div className="mt-4 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-800">
+          Bạn đang mở bằng trình duyệt trong Zalo/Facebook nên không tải được file. Bấm nút ⋯ →
+          chọn “Mở bằng Safari” (iPhone) hoặc “Mở bằng Chrome” (Android), rồi bấm Tải giấy lại.
+        </div>
+      )}
+
       <div className="mt-4 text-center">
         <span className="inline-flex items-center gap-2 rounded-full bg-geoenv-50 px-4 py-1.5 text-xs font-semibold tracking-wide text-geoenv-700 ring-1 ring-geoenv-100 sm:text-sm">
           🏅 Giấy chứng nhận
